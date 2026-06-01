@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Analysis Report — {{ result.filename }}</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --warn: #f59e0b; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; line-height: 1.6; }
+    h1, h2 { color: #fff; }
+    h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    .meta { color: var(--muted); margin-bottom: 2rem; }
+    section { background: var(--card); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; }
+    ul { padding-left: 1.25rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #2d3a4f; }
+    th { color: var(--muted); font-weight: 600; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: #2d3a4f; }
+    .badge.warn { background: #422006; color: var(--warn); }
+    .placeholder { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Data Analysis Report</h1>
+  <p class="meta">{{ result.filename }} · {{ result.row_count }} rows · {{ result.column_count }} columns · Generated {{ generated_at }}</p>
+
+  <section>
+    <h2>Executive summary</h2>
+    <p>{{ result.llama.analysis_summary }}</p>
+    {% if result.llama.recommendations %}
+    <h3>Recommendations</h3>
+    <ul>
+      {% for rec in result.llama.recommendations %}
+      <li>{{ rec }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Dataset overview</h2>
+    <p>{{ result.llama.dataset_overview }}</p>
+  </section>
+
+  <section>
+    <h2>Data quality</h2>
+    {% if result.quality_issues %}
+    <ul>
+      {% for issue in result.quality_issues %}
+      <li><span class="badge {% if issue.severity == 'warning' %}warn{% endif %}">{{ issue.severity }}</span> {{ issue.message }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No major quality issues detected.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Cleaning actions</h2>
+    {% if result.cleaning_actions %}
+    <ul>
+      {% for action in result.cleaning_actions %}
+      <li>{{ action.description }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No cleaning actions were required.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Key insights</h2>
+    <ul>
+      {% for insight in result.rule_insights %}
+      <li><strong>{{ insight.title }}</strong> — {{ insight.message }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section>
+    <h2>Numeric summaries</h2>
+    {% if result.numeric_summaries %}
+    <table>
+      <thead>
+        <tr><th>Column</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th><th>Std</th></tr>
+      </thead>
+      <tbody>
+        {% for s in result.numeric_summaries %}
+        <tr>
+          <td>{{ s.column }}</td>
+          <td>{{ s.mean }}</td>
+          <td>{{ s.median }}</td>
+          <td>{{ s.min }}</td>
+          <td>{{ s.max }}</td>
+          <td>{{ s.std }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No numeric columns found.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Correlations</h2>
+    {% if result.correlations %}
+    <ul>
+      {% for c in result.correlations %}
+      <li>{{ c.column_a }} ↔ {{ c.column_b }}: {{ c.correlation }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>No strong correlations detected among numeric columns.</p>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2>Charts</h2>
+    {% for chart in result.charts %}
+    <p><strong>{{ chart.title }}</strong> ({{ chart.chart_type }})</p>
+    {% endfor %}
+    <p class="placeholder">Open the web app to view interactive charts. Llama chart explanations appear when the API is configured.</p>
+  </section>
+
+  <section>
+    <h2>Llama integration</h2>
+    <p class="placeholder">
+      {% if result.llama.configured %}
+      Llama API is configured.
+      {% else %}
+      Llama explanations use placeholders until ADA_LLAMA_API_KEY is set.
+      {% endif %}
+    </p>
+  </section>
+</body>
+</html>
