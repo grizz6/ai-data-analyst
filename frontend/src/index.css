@@ -166,6 +166,10 @@ header p {
   color: #93c5fd;
 }
 
+td .badge {
+  margin-left: 0.4rem;
+}
+
 .badge.warning {
   background: #422006;
   color: var(--warn);

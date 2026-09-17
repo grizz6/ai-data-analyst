@@ -1,9 +1,11 @@
+from collections.abc import Collection
+
 import pandas as pd
 
 from app.models.schemas import QualityIssue
 
 
-def check_quality(df: pd.DataFrame) -> list[QualityIssue]:
+def check_quality(df: pd.DataFrame, identifiers: Collection[str] = ()) -> list[QualityIssue]:
     issues: list[QualityIssue] = []
     n = len(df)
 
@@ -61,7 +63,7 @@ def check_quality(df: pd.DataFrame) -> list[QualityIssue]:
                 )
             )
 
-    numeric_cols = df.select_dtypes(include="number").columns
+    numeric_cols = [c for c in df.select_dtypes(include="number").columns if c not in identifiers]
     for col in numeric_cols:
         series = df[col].dropna()
         if len(series) < 4:

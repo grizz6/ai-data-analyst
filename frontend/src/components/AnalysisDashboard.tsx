@@ -259,7 +259,10 @@ export default function AnalysisDashboard({ result }: Props) {
               {result.columns.map((col) => (
                 <tr key={col.name}>
                   <td>{col.name}</td>
-                  <td>{col.dtype}</td>
+                  <td>
+                    {col.dtype}
+                    {col.is_identifier && <span className="badge info">identifier</span>}
+                  </td>
                   <td>{col.null_pct}%</td>
                   <td>{col.unique_count}</td>
                   <td>{col.sample_values.slice(0, 3).join(", ")}</td>

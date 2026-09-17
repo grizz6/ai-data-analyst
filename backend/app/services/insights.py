@@ -1,3 +1,5 @@
+from collections.abc import Collection
+
 import pandas as pd
 
 from app.models.schemas import (
@@ -17,8 +19,10 @@ def generate_rule_insights(
     categorical_summaries: list[CategoricalSummary],
     correlations: list[CorrelationPair],
     trends: list[TrendInsight],
+    identifiers: Collection[str] = (),
 ) -> list[RuleInsight]:
     insights: list[RuleInsight] = []
+    present_ids = [c for c in identifiers if c in df.columns]
 
     insights.append(
         RuleInsight(
@@ -27,6 +31,15 @@ def generate_rule_insights(
             message=f"The dataset has {len(df):,} rows and {len(df.columns)} columns after cleaning.",
         )
     )
+    if present_ids:
+        names = ", ".join(f"'{c}'" for c in present_ids)
+        insights.append(
+            RuleInsight(
+                category="overview",
+                title="Identifier columns",
+                message=f"{names} looked like identifiers, so they were left out of statistics and charts.",
+            )
+        )
 
     errors = [q for q in quality_issues if q.severity == "error"]
     warnings = [q for q in quality_issues if q.severity == "warning"]
@@ -100,18 +113,32 @@ def generate_rule_insights(
             )
         )
 
-    numeric_cols = df.select_dtypes(include="number").columns
+    numeric_cols = [c for c in df.select_dtypes(include="number").columns if c not in identifiers]
     for col in numeric_cols[:3]:
-        top_idx = df[col].idxmax()
-        if pd.isna(top_idx):
+        if df[col].isna().all():
             continue
+        top_idx = df[col].idxmax()
         val = df.loc[top_idx, col]
         insights.append(
             RuleInsight(
                 category="extrema",
                 title=f"Highest {col}",
-                message=f"Maximum {col} is {val} (row index {top_idx}).",
+                message=f"Maximum {col} is {val} ({_locate_row(df, top_idx, present_ids)}).",
             )
         )
 
     return insights
+
+
+def _locate_row(df: pd.DataFrame, idx, identifiers: list[str]) -> str:
+    """Point at a record the way a reader would find it in their own file."""
+    if identifiers:
+        value = df.loc[idx, identifiers[0]]
+        # A gap elsewhere in an integer ID column turns it into floats; show 1017, not 1017.0.
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)
+        return f"{identifiers[0]} {value}"
+    if pd.api.types.is_integer(idx):
+        # Index 0 is the first data row, which sits under the header on row 2.
+        return f"row {int(idx) + 2} of the file"
+    return f"row {idx}"

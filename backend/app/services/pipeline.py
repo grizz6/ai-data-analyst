@@ -1,21 +1,35 @@
 import uuid
 
 from app.models.schemas import AnalysisResult, LlamaExplanation
-from app.services import analysis, charts, cleaning, ingestion, insights, llama, profiling, quality
+from app.services import (
+    analysis,
+    charts,
+    cleaning,
+    ingestion,
+    insights,
+    llama,
+    profiling,
+    quality,
+    semantics,
+)
 from app.services.ingestion import df_preview_records
 
 
 async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
     raw_df = ingestion.load_dataframe(file_bytes, filename)
-    quality_issues = quality.check_quality(raw_df)
-    cleaned_df, cleaning_actions = cleaning.clean_dataframe(raw_df)
+    identifiers = semantics.identifier_columns(raw_df)
+    quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
+    cleaned_df, cleaning_actions = cleaning.clean_dataframe(raw_df, identifiers=identifiers)
 
-    columns = profiling.profile_columns(cleaned_df)
-    numeric_summaries = analysis.numeric_summaries(cleaned_df)
-    categorical_summaries = analysis.categorical_summaries(cleaned_df)
-    correlations = analysis.top_correlations(cleaned_df)
-    trends = analysis.detect_trends(cleaned_df)
-    chart_specs = charts.build_charts(cleaned_df)
+    # Statistics and charts only see columns that measure something.
+    metrics_df = cleaned_df.drop(columns=[c for c in identifiers if c in cleaned_df.columns])
+
+    columns = profiling.profile_columns(cleaned_df, identifiers=identifiers)
+    numeric_summaries = analysis.numeric_summaries(metrics_df)
+    categorical_summaries = analysis.categorical_summaries(metrics_df)
+    correlations = analysis.top_correlations(metrics_df)
+    trends = analysis.detect_trends(metrics_df)
+    chart_specs = charts.build_charts(metrics_df)
     rule_insights = insights.generate_rule_insights(
         cleaned_df,
         quality_issues,
@@ -23,6 +37,7 @@ async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
         categorical_summaries,
         correlations,
         trends,
+        identifiers=identifiers,
     )
 
     session_id = str(uuid.uuid4())

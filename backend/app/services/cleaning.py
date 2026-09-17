@@ -1,10 +1,14 @@
+from collections.abc import Collection
+
 import pandas as pd
 
 from app.config import settings
 from app.models.schemas import CleaningAction
 
 
-def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[CleaningAction]]:
+def clean_dataframe(
+    df: pd.DataFrame, identifiers: Collection[str] = ()
+) -> tuple[pd.DataFrame, list[CleaningAction]]:
     cleaned = df.copy()
     actions: list[CleaningAction] = []
 
@@ -34,7 +38,8 @@ def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, list[CleaningAction
 
     for col in cleaned.columns:
         series = cleaned[col]
-        if series.isna().sum() == 0:
+        # A missing ID can't be guessed, and a median ID would point at the wrong record.
+        if series.isna().sum() == 0 or col in identifiers:
             continue
 
         if pd.api.types.is_numeric_dtype(series):

@@ -37,6 +37,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | Step | Module | What it does |
 |------|--------|----------------|
 | 1 | `ingestion.py` | Reads CSV/Excel into a DataFrame and strips whitespace from column names |
+| 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
 | 2 | `quality.py` | Flags duplicates, missing values, constant columns, and IQR outliers, each with a severity |
 | 3 | `cleaning.py` | Drops duplicate rows and ≥90%-empty columns, fills gaps (median for numbers, mode for text), parses date-like columns |
 | 4 | `profiling.py` | Per-column dtype, null %, uniqueness, sample values |

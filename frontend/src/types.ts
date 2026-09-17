@@ -6,6 +6,7 @@ export interface ColumnProfile {
   null_pct: number;
   unique_count: number;
   sample_values: unknown[];
+  is_identifier: boolean;
 }
 
 export interface QualityIssue {

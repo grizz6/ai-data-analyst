@@ -11,6 +11,7 @@ class ColumnProfile(BaseModel):
     null_pct: float
     unique_count: int
     sample_values: list[Any] = Field(default_factory=list)
+    is_identifier: bool = False
 
 
 class QualityIssue(BaseModel):

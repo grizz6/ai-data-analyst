@@ -1,9 +1,11 @@
+from collections.abc import Collection
+
 import pandas as pd
 
 from app.models.schemas import ColumnProfile
 
 
-def profile_columns(df: pd.DataFrame) -> list[ColumnProfile]:
+def profile_columns(df: pd.DataFrame, identifiers: Collection[str] = ()) -> list[ColumnProfile]:
     profiles: list[ColumnProfile] = []
     n = len(df)
 
@@ -28,6 +30,7 @@ def profile_columns(df: pd.DataFrame) -> list[ColumnProfile]:
                 null_pct=round((null_count / n) * 100, 2) if n else 0.0,
                 unique_count=unique_count,
                 sample_values=samples,
+                is_identifier=str(col) in identifiers,
             )
         )
 
