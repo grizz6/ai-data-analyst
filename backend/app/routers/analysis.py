@@ -1,5 +1,6 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models.schemas import QuestionRequest, QuestionResponse
@@ -83,7 +84,8 @@ async def download_report(session_id: str):
     result = get(session_id)
     if not result:
         raise HTTPException(status_code=404, detail="Session not found.")
-    html = report.render_html_report(result)
+    # Serializing every chart into the template takes real CPU on big results.
+    html = await run_in_threadpool(report.render_html_report, result)
     return HTMLResponse(
         content=html,
         headers={

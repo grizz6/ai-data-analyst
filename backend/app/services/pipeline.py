@@ -1,5 +1,7 @@
 import uuid
 
+from starlette.concurrency import run_in_threadpool
+
 from app.models.schemas import AnalysisResult, LlamaExplanation
 from app.services import (
     analysis,
@@ -16,6 +18,16 @@ from app.services.ingestion import df_preview_records
 
 
 async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
+    # Pandas work is CPU-bound and would block every other request if run on
+    # the event loop, so it runs in a worker thread. Only the explanation
+    # step, which waits on network I/O, runs on the loop.
+    result = await run_in_threadpool(compute_analysis, file_bytes, filename)
+    explanation = await llama.explain_analysis(result)
+    return result.model_copy(update={"llama": explanation})
+
+
+def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
+    """Every number in the result is computed here, synchronously."""
     raw_df = ingestion.load_dataframe(file_bytes, filename)
     identifiers = semantics.identifier_columns(raw_df)
     quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
@@ -40,8 +52,7 @@ async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
         identifiers=identifiers,
     )
 
-    session_id = str(uuid.uuid4())
-    placeholder_llama = LlamaExplanation(
+    empty_explanation = LlamaExplanation(
         dataset_overview="",
         chart_explanations=[],
         analysis_summary="",
@@ -49,8 +60,8 @@ async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
         configured=False,
     )
 
-    result = AnalysisResult(
-        session_id=session_id,
+    return AnalysisResult(
+        session_id=str(uuid.uuid4()),
         filename=filename,
         row_count=len(cleaned_df),
         column_count=len(cleaned_df.columns),
@@ -63,10 +74,7 @@ async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
         trends=trends,
         rule_insights=rule_insights,
         charts=chart_specs,
-        llama=placeholder_llama,
+        llama=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),
     )
-
-    explanation = await llama.explain_analysis(result)
-    return result.model_copy(update={"llama": explanation})
