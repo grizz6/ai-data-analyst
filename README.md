@@ -41,7 +41,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 3 | `cleaning.py` | Drops duplicate rows and ≥90%-empty columns, fills gaps (median for numbers, mode for text), parses date-like columns |
 | 4 | `profiling.py` | Per-column dtype, null %, uniqueness, sample values |
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
-| 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line, box plot |
+| 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
 | 8 | `llama.py` | Placeholder explanations and Q&A; builds the structured context a real model would get |
 | 9 | `report.py` | Renders `templates/report.html` with Jinja2 |

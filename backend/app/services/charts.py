@@ -6,12 +6,32 @@ from app.models.schemas import ChartSpec
 from app.utils.json_compat import plotly_figure_to_dict
 
 CHART_ROW_LIMIT = 50_000
+TIME_BUCKET_LIMIT = 366
+MARKER_POINT_LIMIT = 60
+
+# Smallest bucket that keeps the line under TIME_BUCKET_LIMIT points.
+_TIME_BUCKETS = (
+    ("D", 1, "daily"),
+    ("W", 7, "weekly"),
+    ("MS", 31, "monthly"),
+    ("QS", 92, "quarterly"),
+    ("YS", 366, "yearly"),
+)
 
 
 def _sample_for_charts(df: pd.DataFrame) -> pd.DataFrame:
     if len(df) <= CHART_ROW_LIMIT:
         return df
     return df.sample(n=CHART_ROW_LIMIT, random_state=42)
+
+
+def _time_bucket(dates: pd.Series) -> tuple[str, str]:
+    span_days = (dates.max() - dates.min()).days + 1
+    for freq, days, label in _TIME_BUCKETS:
+        if span_days / days <= TIME_BUCKET_LIMIT:
+            return freq, label
+    freq, _, label = _TIME_BUCKETS[-1]
+    return freq, label
 
 
 def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
@@ -94,28 +114,32 @@ def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
     if date_cols and numeric_cols:
         date_col = date_cols[0]
         num_col = numeric_cols[0]
-        grouped = (
-            df.dropna(subset=[date_col, num_col])
-            .sort_values(date_col)
-            .groupby(pd.Grouper(key=date_col, freq="D"))[num_col]
-            .mean()
-            .reset_index()
-        )
-        if len(grouped) > 1:
-            fig = px.line(
-                grouped,
-                x=date_col,
-                y=num_col,
-                title=f"{num_col} over time",
+        rows = df.dropna(subset=[date_col, num_col])
+        if not rows.empty:
+            freq, label = _time_bucket(rows[date_col])
+            grouped = (
+                rows.groupby(pd.Grouper(key=date_col, freq=freq))[num_col]
+                .mean()
+                .dropna()
+                .reset_index()
             )
-            charts.append(
-                ChartSpec(
-                    id="timeseries",
-                    title=f"{num_col} over time",
-                    chart_type="line",
-                    plotly_json=plotly_figure_to_dict(fig),
+            if len(grouped) > 1:
+                title = f"{num_col} over time ({label} average)"
+                fig = px.line(
+                    grouped,
+                    x=date_col,
+                    y=num_col,
+                    title=title,
+                    markers=len(grouped) <= MARKER_POINT_LIMIT,
                 )
-            )
+                charts.append(
+                    ChartSpec(
+                        id="timeseries",
+                        title=title,
+                        chart_type="line",
+                        plotly_json=plotly_figure_to_dict(fig),
+                    )
+                )
 
     if numeric_cols:
         melted = df[numeric_cols].melt(var_name="column", value_name="value").dropna()
