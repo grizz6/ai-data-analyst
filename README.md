@@ -1,10 +1,12 @@
 # AI Data Analyst Agent
 
+[![CI](https://github.com/grizz6/AI-Data-Analyst-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/grizz6/AI-Data-Analyst-Agent/actions/workflows/ci.yml)
+
 ## About
 
-A FastAPI backend that takes an uploaded CSV or Excel file and returns a full automated analysis: data-quality checks, cleaning, summary statistics, correlations, trend detection, Plotly charts, plain-English insights, and a downloadable HTML report.
+Upload a CSV or Excel file and get an analysis you can check: a data-quality report, cleaning, summary statistics, correlations, trends, interactive charts, plain-English insights, and a downloadable HTML report. FastAPI backend, React + TypeScript frontend.
 
-**Design choice:** Pandas computes every number. The language model layer (planned: Meta Llama 4 Scout) is only allowed to explain and summarize results it's handed, never to calculate them, so every figure in the output can be traced back to code.
+**Design choice:** Pandas computes every number. An optional language model explains results it's handed and is not allowed to calculate. That rule is enforced in code, not just in the prompt: every number in the model's reply is checked against the computed facts, and a reply containing a number that isn't there is thrown away in favor of rule-based text.
 
 **Status:**
 
@@ -12,21 +14,28 @@ A FastAPI backend that takes an uploaded CSV or Excel file and returns a full au
 |---|---|
 | Analysis pipeline (ingest → quality → clean → profile → analyze → charts → insights → report) | Working |
 | REST API + interactive docs at `/docs` | Working |
-| LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| React frontend | **Not in this repo.** `scripts/run-frontend.sh` expects a `frontend/` folder that hasn't been committed |
+| React frontend (`frontend/`) | Working |
+| LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
+| Tests and CI | 128 pytest tests. GitHub Actions runs them, plus a frontend type-check and build, on every push |
+| Persistence | **Not yet.** Results live in memory (`session_store.py`) and disappear on restart |
+| Deployment | **Not yet.** Runs locally |
 
 ---
 
 ## Architecture
 
 ```
-upload (.csv/.xlsx/.xls)
-        │
+Browser: React + Vite (frontend/)
+        │  upload .csv / .xlsx / .xls
         ▼
-┌──────────────────────────── FastAPI backend ────────────────────────────┐
-│ ingestion → quality → cleaning → profiling → analysis → charts          │
-│          → insights (rule-based) → llama (placeholder) → session store  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────── FastAPI backend ─────────────────────────────┐
+│ size limit (middleware)                                                   │
+│   → ingestion → identifiers → quality → cleaning → profiling              │
+│   → analysis → charts → rule-based insights       worker thread (Pandas)  │
+│   → explanation: LLM + grounding check,                                   │
+│     or rule-based fallback                        event loop (network)    │
+│   → in-memory session store                                               │
+└───────────────────────────────────────────────────────────────────────────┘
         │
         ▼
 JSON result  +  Plotly chart specs  +  HTML report download
@@ -40,28 +49,42 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
 | 2 | `quality.py` | Flags duplicates, missing values, constant columns, and IQR outliers, each with a severity |
 | 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
-| 4 | `profiling.py` | Per-column dtype, null %, uniqueness, sample values |
+| 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
 | 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
 | 8 | `llama.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
-| 9 | `report.py` | Renders `templates/report.html` with Jinja2 |
+| 9 | `report.py` | Renders `templates/report.html` with Jinja2, charts included |
 
-`pipeline.py` chains all of these for a single upload. Results are held in an in-memory dict (`session_store.py`), so they disappear when the server restarts.
+`pipeline.py` chains these for one upload. The Pandas work runs in a worker thread so one large file doesn't stall other requests; only the explanation step, which waits on the network, runs on the event loop.
 
 ---
 
 ## Quick start
 
-Developed on Python 3.12 (the pinned NumPy needs 3.10 or newer).
+Developed on Python 3.12 (the pinned NumPy needs 3.10 or newer) and Node 22.
 
 ```bash
 ./scripts/run-backend.sh
 ```
 
-On first run the script creates `backend/.venv` and installs `requirements.txt`, then starts Uvicorn on `http://127.0.0.1:8000`.
+On first run the script creates `backend/.venv` and installs `requirements.txt`, then starts Uvicorn on `http://127.0.0.1:8000`. API docs are at **http://127.0.0.1:8000/docs**.
 
-Open **http://127.0.0.1:8000/docs**, expand `POST /api/upload`, and upload `sample-data/sales_sample.csv` (31 rows of weekly sales by region and product). The response includes a `session_id` you can pass to the other endpoints.
+In a second terminal:
+
+```bash
+./scripts/run-frontend.sh
+```
+
+Open **http://localhost:5173** and drop in `sample-data/sales_sample.csv` (31 rows of weekly sales by region and product).
+
+### Tests
+
+```bash
+cd backend
+python -m pip install -r requirements-dev.txt
+python -m pytest
+```
 
 ### Configuration
 
@@ -75,6 +98,14 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
 
+### Turning on the language model
+
+1. Create a free API key at [console.groq.com](https://console.groq.com), or use any provider with an OpenAI-compatible API and set `ADA_LLM_BASE_URL` and `ADA_LLM_MODEL` to match.
+2. Put the key in `backend/.env` as `ADA_LLM_API_KEY=...` and restart the backend.
+3. `GET /api/health` should report `"llm_configured": true`.
+
+Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_based"`, `model` names the model, and `fallback_reason` explains any fallback (provider down, timeout, bad JSON, or a number the model made up). The frontend banner and the report's "How this report was made" section show the same thing.
+
 ---
 
 ## API endpoints
@@ -83,9 +114,9 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 |--------|------|-------------|
 | `POST` | `/api/upload` | Upload a file and run the full pipeline. For Excel, `?sheet=NAME` picks a sheet; otherwise the first sheet with data is used |
 | `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
-| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data (returns the key findings until an LLM key is set) |
+| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set |
 | `GET` | `/api/sessions/{id}/report` | Download the HTML report |
-| `GET` | `/api/health` | Status, upload limit, and whether an LLM key is set |
+| `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
 
 Problems with the file itself (empty, unreadable, bad sheet name) return 400 with a plain explanation. Unexpected server errors return 500 with a short reference code; the details go to the server log only.
 
@@ -94,13 +125,32 @@ Problems with the file itself (empty, unreadable, bad sheet name) return 400 wit
 ## The algorithms
 
 - **Missing values and constant columns** (`quality.py`): `isna().mean()` gives each column's null rate. Anything above 0% is `info`, 50% or more is a `warning`, and 90% or more is an `error`. A column with exactly one distinct non-null value is flagged as constant.
-- **IQR outliers** (`quality.py`): for each numeric column with at least 4 values, compute Q1, Q3, and `IQR = Q3 − Q1`, then count values outside `[Q1 − 1.5·IQR, Q3 + 1.5·IQR]` (Tukey's fences).
+- **IQR outliers** (`quality.py`): for each numeric, non-identifier column with at least 4 values, compute Q1, Q3, and `IQR = Q3 − Q1`, then count values outside `[Q1 − 1.5·IQR, Q3 + 1.5·IQR]` (Tukey's fences).
+- **Identifier detection** (`semantics.py`): column names are split into words across snake_case, camelCase, and spaces. Any word `id`, or a last word such as `uuid`, `key`, `sku`, `zip`, or `phone`, marks an identifier, while `paid` or `grid_size` don't match. A whole-number column counting up by one with no gaps or repeats over 20+ rows is a row counter whatever its name.
 - **Correlation ranking** (`analysis.py: top_correlations`): Pearson correlation across all numeric pairs, keeping pairs with `|r| ≥ 0.5` and returning the 10 strongest.
 - **Trend detection** (`analysis.py: detect_trends`), two methods:
   - *Date-based:* sort by the first datetime column, then compare the mean of the first half against the second half for up to 3 numeric columns. More than +5% is "up", below −5% is "down", anything between is "stable".
   - *Row-order proxy:* only when the file has no datetime column. For up to 5 numeric columns with at least 10 values, compare the mean of the first 5 rows to the mean of the last 5. A rise or fall of more than 10% is reported with its percentage.
-- **Rule-based insights** (`insights.py`): converts dataset size, quality counts, numeric summaries, top categories, correlations (≥0.7 = "strong", otherwise "moderate"), trends, and column maximums into sentences, so the narrative is deterministic.
+- **Rule-based insights** (`insights.py`): converts dataset size, quality counts, numeric summaries, top categories, correlations (≥0.7 = "strong", otherwise "moderate"), trends, and column maximums into sentences, so the narrative is deterministic. A maximum points at its record by ID, or by its row in the original file.
+- **Grounding check** (`grounding.py`): extracts every number from the model's text and requires each to match a number in the facts it was sent, within the rounding its own decimal places imply (`0.98` matches `0.9832`, `0.99` doesn't). Totals, ratios, restated percentages, and invented figures fail. Signs are compared loosely, so "fell 3.5%" matches a change of `-3.5`; the check guarantees magnitudes, not direction words.
+- **Model calls** (`llm_client.py`): plain `httpx` in JSON mode with a 30 s timeout. Timeouts, connection errors, 429 and 5xx are retried twice with exponential backoff (honoring `Retry-After` up to 10 s). Other 4xx errors fail at once. Replies are validated with Pydantic before use.
+
+## How it's tested
+
+`backend/tests/` builds datasets with defects planted at known positions and asserts the pipeline finds exactly those: missingness at 91 / 55 / 10%, exactly three values outside Tukey's fences, two columns constructed at r = 0.87, a series rising 30% versus one moving 2%, identifier columns, gaps in dates, several CSV encodings and delimiters, multi-sheet workbooks, and uploads just over the size limit.
+
+The model layer runs against `httpx.MockTransport` instead of a real provider, which scripts every failure: timeouts, 503 then success, 429 with `Retry-After`, 401, prose instead of JSON, missing fields, and replies containing made-up numbers. No test needs an API key or the network, and a fixture keeps tests off a real provider even when `backend/.env` holds a key.
+
+## Known limits
+
+- Results are kept in memory, so a restart loses them, and there is no expiry.
+- Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
+- The LLM path has only been exercised against a fake provider.
+- The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
+- The box plot puts all numeric columns on one axis, so columns on small scales flatten out next to large ones.
 
 ## Built with
 
-Python, FastAPI, Uvicorn, Pandas, NumPy, Plotly, Jinja2, Pydantic, openpyxl.
+**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, Plotly, Jinja2, Pydantic, httpx, openpyxl, pytest.
+**Frontend:** React, TypeScript, Vite, Plotly.js.
+**CI:** GitHub Actions.
