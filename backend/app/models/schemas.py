@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -73,12 +73,33 @@ class ChartSpec(BaseModel):
     plotly_json: dict[str, Any]
 
 
+ExplanationSource = Literal["rule_based", "llm"]
+
+
 class LlamaExplanation(BaseModel):
     dataset_overview: str
     chart_explanations: list[dict[str, str]]
     analysis_summary: str
     recommendations: list[str]
+    # configured: an API key is set. source: what actually wrote this text, which is
+    # "rule_based" whenever the model is unset, unreachable, or failed the grounding check.
     configured: bool = False
+    source: ExplanationSource = "rule_based"
+    model: str | None = None
+    fallback_reason: str | None = None
+
+
+class ModelExplanation(BaseModel):
+    """The JSON shape the model is asked to return, validated before use."""
+
+    dataset_overview: str = Field(min_length=1)
+    analysis_summary: str = Field(min_length=1)
+    recommendations: list[str] = Field(default_factory=list, max_length=6)
+    chart_explanations: list[dict[str, str]] = Field(default_factory=list)
+
+
+class ModelAnswer(BaseModel):
+    answer: str = Field(min_length=1)
 
 
 class AnalysisResult(BaseModel):
@@ -109,15 +130,5 @@ class QuestionRequest(BaseModel):
 class QuestionResponse(BaseModel):
     answer: str
     configured: bool = False
-
-
-class AskContext(BaseModel):
-    """Structured facts passed to Llama when API is configured."""
-
-    filename: str
-    shape: tuple[int, int]
-    column_names: list[str]
-    quality_issue_count: int
-    top_insights: list[str]
-    numeric_highlights: list[str]
-    categorical_highlights: list[str]
+    source: ExplanationSource = "rule_based"
+    fallback_reason: str | None = None

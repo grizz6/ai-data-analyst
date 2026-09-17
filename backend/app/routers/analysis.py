@@ -114,6 +114,7 @@ async def download_report(session_id: str):
 async def health():
     return {
         "status": "ok",
-        "llama_configured": llama.is_llama_configured(),
+        "llm_configured": llama.is_llama_configured(),
+        "llm_model": settings.llm_model if llama.is_llama_configured() else None,
         "max_upload_mb": settings.max_upload_mb,
     }

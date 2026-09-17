@@ -60,6 +60,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         {!result.llama.configured && (
           <> · Summaries are rule-based because no LLM API key is set on the server.</>
         )}
+        {result.llama.configured && result.llama.fallback_reason && (
+          <> · The language model's summary wasn't used ({result.llama.fallback_reason}), so it is rule-based.</>
+        )}
       </div>
 
       <div className="stats">
@@ -96,7 +99,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       </div>
 
       <div className="panel">
-        <h2>Summary {result.llama.configured ? "(LLM)" : "(rule-based)"}</h2>
+        <h2>
+          Summary{" "}
+          {result.llama.source === "llm" ? `(written by ${result.llama.model})` : "(rule-based)"}
+        </h2>
         <p>{result.llama.dataset_overview}</p>
         <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Analysis summary</h3>
         <p style={{ whiteSpace: "pre-wrap" }}>{result.llama.analysis_summary}</p>

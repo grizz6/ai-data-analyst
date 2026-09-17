@@ -3,9 +3,19 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.main import app
 
 SAMPLE_CSV = Path(__file__).resolve().parents[2] / "sample-data" / "sales_sample.csv"
+
+
+@pytest.fixture(autouse=True)
+def no_real_llm(monkeypatch):
+    """Tests never reach a real provider, even when backend/.env holds a key.
+
+    Tests that exercise the model layer opt back in with a fake key and a fake transport.
+    """
+    monkeypatch.setattr(settings, "llm_api_key", "")
 
 
 @pytest.fixture

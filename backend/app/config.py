@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     # chat completions endpoint works; empty key means rule-based text.
     llm_api_key: str = ""
     llm_base_url: str = "https://api.groq.com/openai/v1"
-    llm_model: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # Llama 4 Scout was retired on Groq on 2026-07-17; Llama 3.3 70B is still in production there.
+    llm_model: str = "llama-3.3-70b-versatile"
 
     @property
     def max_upload_bytes(self) -> int:

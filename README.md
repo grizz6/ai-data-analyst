@@ -12,7 +12,7 @@ A FastAPI backend that takes an uploaded CSV or Excel file and returns a full au
 |---|---|
 | Analysis pipeline (ingest → quality → clean → profile → analyze → charts → insights → report) | Working |
 | REST API + interactive docs at `/docs` | Working |
-| Llama explanations and Q&A | **Placeholder.** Returns templated text; the HTTP client is a `TODO` in `llama.py` |
+| LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
 | React frontend | **Not in this repo.** `scripts/run-frontend.sh` expects a `frontend/` folder that hasn't been committed |
 
 ---
@@ -44,7 +44,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
 | 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
-| 8 | `llama.py` | Placeholder explanations and Q&A; builds the structured context a real model would get |
+| 8 | `llama.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
 | 9 | `report.py` | Renders `templates/report.html` with Jinja2 |
 
 `pipeline.py` chains all of these for a single upload. Results are held in an in-memory dict (`session_store.py`), so they disappear when the server restarts.
@@ -73,7 +73,7 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
-| `ADA_LLM_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | Model name at that endpoint |
+| `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
 
 ---
 

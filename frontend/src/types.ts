@@ -65,12 +65,19 @@ export interface ChartSpec {
   plotly_json: Record<string, unknown>;
 }
 
+export type ExplanationSource = "rule_based" | "llm";
+
 export interface LlamaExplanation {
   dataset_overview: string;
   chart_explanations: { chart_id: string; explanation: string }[];
   analysis_summary: string;
   recommendations: string[];
+  /** An API key is set on the server. */
   configured: boolean;
+  /** What actually wrote the text; rule_based when the model is unset or its reply was rejected. */
+  source: ExplanationSource;
+  model: string | null;
+  fallback_reason: string | null;
 }
 
 export interface AnalysisResult {
@@ -97,4 +104,6 @@ export interface AnalysisResult {
 export interface QuestionResponse {
   answer: string;
   configured: boolean;
+  source: ExplanationSource;
+  fallback_reason: string | null;
 }
