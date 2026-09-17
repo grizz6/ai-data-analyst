@@ -93,7 +93,7 @@ Settings come from environment variables with the `ADA_` prefix (`backend/app/co
 - **Correlation ranking** (`analysis.py: top_correlations`): Pearson correlation across all numeric pairs, keeping pairs with `|r| ≥ 0.5` and returning the 10 strongest.
 - **Trend detection** (`analysis.py: detect_trends`), two methods:
   - *Date-based:* sort by the first datetime column, then compare the mean of the first half against the second half for up to 3 numeric columns. More than +5% is "up", below −5% is "down", anything between is "stable".
-  - *Row-order proxy:* for up to 5 numeric columns with at least 10 values, compare the last 5-row rolling mean to the first. A rise or fall of more than 10% is reported.
+  - *Row-order proxy:* only when the file has no datetime column. For up to 5 numeric columns with at least 10 values, compare the mean of the first 5 rows to the mean of the last 5. A rise or fall of more than 10% is reported with its percentage.
 - **Rule-based insights** (`insights.py`): converts dataset size, quality counts, numeric summaries, top categories, correlations (≥0.7 = "strong", otherwise "moderate"), trends, and column maximums into sentences, so the narrative is deterministic.
 
 ## Built with

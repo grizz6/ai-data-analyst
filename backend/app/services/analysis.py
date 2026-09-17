@@ -106,29 +106,36 @@ def detect_trends(df: pd.DataFrame) -> list[TrendInsight]:
                 )
             )
 
+    # Row order is only a stand-in for time when there is no real date column.
+    if date_cols:
+        return trends[:8]
+
+    window = 5
     for col in numeric_cols[:5]:
         series = df[col].dropna()
-        if len(series) < 10:
+        if len(series) < 2 * window:
             continue
-        rolling = series.rolling(window=min(5, len(series)), min_periods=2).mean()
-        if rolling.iloc[-1] > rolling.iloc[0] * 1.1:
-            trends.append(
-                TrendInsight(
-                    column=str(col),
-                    direction="up",
-                    change_pct=None,
-                    message=f"'{col}' shows an upward pattern over row order (proxy trend).",
-                )
+        start = series.iloc[:window].mean()
+        end = series.iloc[-window:].mean()
+        if start == 0:
+            continue
+        change_pct = ((end - start) / abs(start)) * 100
+        if abs(change_pct) <= 10:
+            continue
+        direction = "up" if change_pct > 0 else "down"
+        pattern = "an upward" if direction == "up" else "a downward"
+        trends.append(
+            TrendInsight(
+                column=str(col),
+                direction=direction,
+                change_pct=round(float(change_pct), 2),
+                message=(
+                    f"'{col}' shows {pattern} pattern over row order "
+                    f"(~{change_pct:+.1f}%, first {window} rows vs last {window}). "
+                    "No date column was found, so row order stands in for time."
+                ),
             )
-        elif rolling.iloc[-1] < rolling.iloc[0] * 0.9:
-            trends.append(
-                TrendInsight(
-                    column=str(col),
-                    direction="down",
-                    change_pct=None,
-                    message=f"'{col}' shows a downward pattern over row order (proxy trend).",
-                )
-            )
+        )
 
     return trends[:8]
 

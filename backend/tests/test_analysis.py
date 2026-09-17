@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -44,3 +45,29 @@ def test_date_trend_rising_thirty_percent_is_up():
 def test_date_trend_moving_two_percent_is_stable():
     [trend] = detect_trends(weekly_series(100, 102))
     assert trend.direction == "stable"
+
+
+def test_row_order_trend_detects_a_rising_series():
+    df = pd.DataFrame({"x": np.linspace(10, 30, 40)})
+    [trend] = detect_trends(df)
+
+    expected = (df["x"].iloc[-5:].mean() - df["x"].iloc[:5].mean()) / df["x"].iloc[:5].mean() * 100
+    assert trend.direction == "up"
+    assert trend.change_pct == pytest.approx(expected, abs=0.01)
+
+
+def test_row_order_trend_detects_a_falling_series():
+    df = pd.DataFrame({"x": np.linspace(30, 10, 40)})
+    [trend] = detect_trends(df)
+    assert trend.direction == "down"
+    assert trend.change_pct < -10
+
+
+def test_row_order_trend_ignores_small_moves_and_zero_baselines():
+    df = pd.DataFrame({"flat": [100, 101, 99, 100, 102] * 4, "from_zero": [0] * 5 + [50] * 15})
+    assert detect_trends(df) == []
+
+
+def test_row_order_trend_is_skipped_when_a_date_column_exists():
+    df = weekly_series(100, 130)
+    assert [t.message for t in detect_trends(df) if "row order" in t.message] == []
