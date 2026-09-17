@@ -185,7 +185,8 @@ def _recommendations(result: AnalysisResult) -> list[str]:
 def rule_based_answer(
     result: AnalysisResult, *, configured: bool = False, fallback_reason: str | None = None
 ) -> QuestionResponse:
-    highlights = "\n".join(f"- {i.message}" for i in result.rule_insights[:6])
+    # Titles carry the column name ("Summary for sales"); some messages don't repeat it.
+    highlights = "\n".join(f"- {i.title}: {i.message}" for i in result.rule_insights[:6])
     opening = (
         "The language model couldn't answer just now, so here is what the analysis found:"
         if configured

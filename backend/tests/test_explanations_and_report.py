@@ -61,6 +61,7 @@ def test_ask_without_key_returns_findings_not_placeholder(client, sample_csv_byt
 
     assert "placeholder" not in body["answer"].lower()
     assert "Here is what the analysis found" in body["answer"]
+    assert "- Summary for sales: Mean 9,419.35" in body["answer"]
     assert body["configured"] is False
 
 
