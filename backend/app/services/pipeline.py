@@ -31,19 +31,24 @@ def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
     raw_df = ingestion.load_dataframe(file_bytes, filename)
     identifiers = semantics.identifier_columns(raw_df)
     quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
-    cleaned_df, cleaning_actions = cleaning.clean_dataframe(raw_df, identifiers=identifiers)
+
+    # prepared_df has duplicates and empty columns removed and dates parsed, but no
+    # filled-in values: every statistic below comes from recorded data only.
+    prepared_df, prepare_actions = cleaning.prepare_dataframe(raw_df)
+    cleaned_df, fill_actions = cleaning.fill_missing(prepared_df, identifiers=identifiers)
+    cleaning_actions = prepare_actions + fill_actions
 
     # Statistics and charts only see columns that measure something.
-    metrics_df = cleaned_df.drop(columns=[c for c in identifiers if c in cleaned_df.columns])
+    metrics_df = prepared_df.drop(columns=[c for c in identifiers if c in prepared_df.columns])
 
-    columns = profiling.profile_columns(cleaned_df, identifiers=identifiers)
+    columns = profiling.profile_columns(prepared_df, identifiers=identifiers)
     numeric_summaries = analysis.numeric_summaries(metrics_df)
     categorical_summaries = analysis.categorical_summaries(metrics_df)
     correlations = analysis.top_correlations(metrics_df)
     trends = analysis.detect_trends(metrics_df)
     chart_specs = charts.build_charts(metrics_df)
     rule_insights = insights.generate_rule_insights(
-        cleaned_df,
+        prepared_df,
         quality_issues,
         numeric_summaries,
         categorical_summaries,
@@ -63,8 +68,8 @@ def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
     return AnalysisResult(
         session_id=str(uuid.uuid4()),
         filename=filename,
-        row_count=len(cleaned_df),
-        column_count=len(cleaned_df.columns),
+        row_count=len(prepared_df),
+        column_count=len(prepared_df.columns),
         columns=columns,
         quality_issues=quality_issues,
         cleaning_actions=cleaning_actions,
