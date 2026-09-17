@@ -10,6 +10,27 @@ from app.session_store import get, save
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
+READ_CHUNK_BYTES = 1024 * 1024
+
+
+def too_large_detail() -> str:
+    return f"File exceeds the {settings.max_upload_mb} MB upload limit."
+
+
+async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
+    """Read an upload in chunks, stopping as soon as it passes max_bytes.
+
+    Never holds more than max_bytes plus one chunk in memory, even when the
+    client sent no Content-Length for the middleware to check.
+    """
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := await file.read(READ_CHUNK_BYTES):
+        size += len(chunk)
+        if size > max_bytes:
+            raise HTTPException(status_code=413, detail=too_large_detail())
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 @router.post("/upload")
@@ -24,13 +45,9 @@ async def upload_dataset(file: UploadFile = File(...)):
             detail="Unsupported file type. Use CSV or Excel (.csv, .xlsx, .xls).",
         )
 
-    content = await file.read()
-    max_bytes = settings.max_upload_mb * 1024 * 1024
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File exceeds {settings.max_upload_mb} MB limit.",
-        )
+    content = await read_capped(file, settings.max_upload_bytes)
+    if not content:
+        raise HTTPException(status_code=400, detail="The file is empty.")
 
     try:
         result = await run_full_analysis(content, file.filename)

@@ -6,12 +6,16 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = "AI Data Analyst Agent"
     upload_dir: Path = Path(__file__).resolve().parent.parent / "uploads"
-    max_upload_mb: int = 500
+    max_upload_mb: int = 10
     missing_threshold_drop: float = 0.9
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     class Config:
         env_prefix = "ADA_"
+
+    @property
+    def max_upload_bytes(self) -> int:
+        return self.max_upload_mb * 1024 * 1024
 
 
 settings = Settings()

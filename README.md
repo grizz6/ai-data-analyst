@@ -69,7 +69,7 @@ Settings come from environment variables with the `ADA_` prefix (`backend/app/co
 
 | Variable | Default | Effect |
 |---|---|---|
-| `ADA_MAX_UPLOAD_MB` | `500` | Upload size limit |
+| `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
 | `ADA_LLAMA_API_KEY` | unset | Flips `llama_configured` to true (the client itself isn't implemented yet) |
 

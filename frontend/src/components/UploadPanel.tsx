@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 interface Props {
   onUpload: (file: File) => void;
+  onReject: (message: string) => void;
   loading: boolean;
 }
 
-export default function UploadPanel({ onUpload, loading }: Props) {
+export default function UploadPanel({ onUpload, onReject, loading }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
-  const [maxUploadMb, setMaxUploadMb] = useState(500);
+  const [maxUploadMb, setMaxUploadMb] = useState(10);
 
   useEffect(() => {
     fetch("/api/health")
@@ -22,9 +23,14 @@ export default function UploadPanel({ onUpload, loading }: Props) {
   const handleFile = useCallback(
     (file: File | undefined) => {
       if (!file || loading) return;
+      // Same limit the server enforces; checking here saves sending a file that will be refused.
+      if (file.size > maxUploadMb * 1024 * 1024) {
+        onReject(`File exceeds the ${maxUploadMb} MB upload limit.`);
+        return;
+      }
       onUpload(file);
     },
-    [loading, onUpload]
+    [loading, maxUploadMb, onReject, onUpload]
   );
 
   return (

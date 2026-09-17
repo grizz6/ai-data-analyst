@@ -37,7 +37,7 @@ export default function App() {
       {!result && (
         <div className="panel">
           <h2>Upload dataset</h2>
-          <UploadPanel onUpload={handleUpload} loading={loading} />
+          <UploadPanel onUpload={handleUpload} onReject={setError} loading={loading} />
           {error && <p className="error-msg">{error}</p>}
           {loading && <p className="loading">Running analysis pipeline…</p>}
         </div>
