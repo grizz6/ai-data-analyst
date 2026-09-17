@@ -29,8 +29,8 @@ export default function App() {
         <h1>AI Data Analyst Agent</h1>
         <p>
           Upload a dataset and get automated quality checks, cleaning, statistics,
-          charts, and insights — with Meta Llama 4 Scout ready to explain results in
-          plain English once you add your API key.
+          charts, and insights. Every number is computed with Pandas; an optional
+          language model only explains the results.
         </p>
       </header>
 

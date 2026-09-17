@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Analysis Report — {{ result.filename }}</title>
+  <title>Data Analysis Report: {{ result.filename }}</title>
   <style>
-    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --warn: #f59e0b; }
+    :root { --bg: #0f1419; --card: #1a2332; --card-2: #212c3d; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --warn: #f59e0b; --error: #f87171; }
     * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; line-height: 1.6; }
     h1, h2 { color: #fff; }
@@ -16,14 +16,20 @@
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #2d3a4f; }
     th { color: var(--muted); font-weight: 600; }
+    td.num { font-variant-numeric: tabular-nums; }
     .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: #2d3a4f; }
-    .badge.warn { background: #422006; color: var(--warn); }
-    .placeholder { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--muted); }
+    .badge.warning { background: #422006; color: var(--warn); }
+    .badge.error { background: #450a0a; color: var(--error); }
+    .note { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--muted); }
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1rem; }
+    .chart-card { background: var(--card-2); border-radius: 10px; padding: 0.75rem; min-width: 0; }
+    .chart-card h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+    .chart { width: 100%; height: 320px; }
   </style>
 </head>
 <body>
   <h1>Data Analysis Report</h1>
-  <p class="meta">{{ result.filename }} · {{ result.row_count }} rows · {{ result.column_count }} columns · Generated {{ generated_at }}</p>
+  <p class="meta">{{ result.filename }} · {{ result.row_count | num }} rows · {{ result.column_count }} columns · Generated {{ generated_at }}</p>
 
   <section>
     <h2>Executive summary</h2>
@@ -48,7 +54,7 @@
     {% if result.quality_issues %}
     <ul>
       {% for issue in result.quality_issues %}
-      <li><span class="badge {% if issue.severity == 'warning' %}warn{% endif %}">{{ issue.severity }}</span> {{ issue.message }}</li>
+      <li><span class="badge {{ issue.severity }}">{{ issue.severity }}</span> {{ issue.message }}</li>
       {% endfor %}
     </ul>
     {% else %}
@@ -73,7 +79,7 @@
     <h2>Key insights</h2>
     <ul>
       {% for insight in result.rule_insights %}
-      <li><strong>{{ insight.title }}</strong> — {{ insight.message }}</li>
+      <li><strong>{{ insight.title }}:</strong> {{ insight.message }}</li>
       {% endfor %}
     </ul>
   </section>
@@ -89,11 +95,11 @@
         {% for s in result.numeric_summaries %}
         <tr>
           <td>{{ s.column }}</td>
-          <td>{{ s.mean }}</td>
-          <td>{{ s.median }}</td>
-          <td>{{ s.min }}</td>
-          <td>{{ s.max }}</td>
-          <td>{{ s.std }}</td>
+          <td class="num">{{ s.mean | num }}</td>
+          <td class="num">{{ s.median | num }}</td>
+          <td class="num">{{ s.min | num }}</td>
+          <td class="num">{{ s.max | num }}</td>
+          <td class="num">{{ s.std | num }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -116,23 +122,53 @@
     {% endif %}
   </section>
 
+  {% if result.charts %}
   <section>
     <h2>Charts</h2>
-    {% for chart in result.charts %}
-    <p><strong>{{ chart.title }}</strong> ({{ chart.chart_type }})</p>
-    {% endfor %}
-    <p class="placeholder">Open the web app to view interactive charts. Llama chart explanations appear when the API is configured.</p>
+    <div class="chart-grid">
+      {% for chart in result.charts %}
+      <div class="chart-card">
+        <h3>{{ chart.title }}</h3>
+        <div class="chart" id="chart-{{ loop.index }}"></div>
+        {% if chart_notes.get(chart.id) %}<p class="note">{{ chart_notes.get(chart.id) }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <noscript><p class="note">Charts need JavaScript and an internet connection to load Plotly.</p></noscript>
   </section>
+  {% endif %}
 
   <section>
-    <h2>Llama integration</h2>
-    <p class="placeholder">
+    <h2>How this report was made</h2>
+    <p class="note">
+      Every number was computed with Pandas.
       {% if result.llama.configured %}
-      Llama API is configured.
+      The summary text was written by a language model from those computed results, and the model was not allowed to calculate anything itself.
       {% else %}
-      Llama explanations use placeholders until ADA_LLAMA_API_KEY is set.
+      The summary text was generated from rules, with no language model involved.
       {% endif %}
     </p>
   </section>
+
+  {% if result.charts %}
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <script>
+    (function () {
+      if (!window.Plotly) return;
+      var charts = {{ result.charts | map(attribute="plotly_json") | list | tojson }};
+      charts.forEach(function (fig, i) {
+        var layout = Object.assign({}, fig.layout || {}, {
+          paper_bgcolor: "transparent",
+          plot_bgcolor: "transparent",
+          font: { color: "#e7ecf3", size: 11 },
+          margin: { t: 16, r: 16, b: 40, l: 48 },
+          autosize: true
+        });
+        delete layout.title; // the card heading already shows it
+        Plotly.newPlot("chart-" + (i + 1), fig.data, layout, { displayModeBar: false, responsive: true });
+      });
+    })();
+  </script>
+  {% endif %}
 </body>
 </html>

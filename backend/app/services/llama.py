@@ -1,25 +1,21 @@
 """
-Meta Llama 4 Scout integration (stub).
+Explanation layer.
 
-When you have an API key, set:
-  ADA_LLAMA_API_KEY=<your-key>
-  ADA_LLAMA_API_BASE=<optional endpoint URL>
+All numbers and charts come from Pandas/Plotly in other services. This layer
+only turns those results into readable text. Without a model configured it
+writes that text from rules, so the output is deterministic and every figure
+in it is copied from the analysis result rather than produced here.
 
-Llama is used only for natural-language tasks. All numbers and charts
-come from Pandas/Plotly in other services.
+The model client (Meta Llama 4 Scout) is still a TODO below.
 """
 
 import os
 from typing import Any
 
-from app.models.schemas import (
-    AnalysisResult,
-    AskContext,
-    ChartSpec,
-    LlamaExplanation,
-    QuestionResponse,
-    RuleInsight,
-)
+from app.models.schemas import AnalysisResult, AskContext, LlamaExplanation, QuestionResponse
+
+HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
+MAX_RECOMMENDATIONS = 6
 
 
 def is_llama_configured() -> bool:
@@ -47,38 +43,72 @@ def build_ask_context(result: AnalysisResult) -> AskContext:
     )
 
 
-def _placeholder_explanation(
-    result: AnalysisResult, *, configured: bool = False
-) -> LlamaExplanation:
-    chart_notes = [
-        {
-            "chart_id": c.id,
-            "explanation": (
-                f"[Llama placeholder] Chart '{c.title}' ({c.chart_type}) — "
-                "connect ADA_LLAMA_API_KEY to get a natural-language explanation."
-            ),
-        }
-        for c in result.charts
-    ]
+def rule_based_explanation(result: AnalysisResult, *, configured: bool = False) -> LlamaExplanation:
+    issue_count = len(result.quality_issues)
+    overview = (
+        f"'{result.filename}' has {result.row_count:,} rows and {result.column_count} columns "
+        f"after cleaning. {issue_count} data quality issue{'s' if issue_count != 1 else ''} "
+        "were flagged before cleaning. Every figure in this analysis was computed with Pandas."
+    )
 
-    insight_lines = "\n".join(f"- {i.message}" for i in result.rule_insights[:8])
+    highlights = [i.message for i in result.rule_insights if i.category in HIGHLIGHT_CATEGORIES]
+    summary = (
+        " ".join(highlights[:4])
+        if highlights
+        else "No strong correlations, trends, or dominant categories stood out in this file."
+    )
 
     return LlamaExplanation(
-        dataset_overview=(
-            f"[Llama placeholder] Your file '{result.filename}' has "
-            f"{result.row_count:,} rows and {result.column_count} columns. "
-            "Statistical results below were computed with Pandas."
+        dataset_overview=overview,
+        chart_explanations=[],
+        analysis_summary=summary,
+        recommendations=_recommendations(result),
+        configured=configured,
+    )
+
+
+def _recommendations(result: AnalysisResult) -> list[str]:
+    recs: list[str] = []
+
+    for action in result.cleaning_actions:
+        if action.action == "drop_duplicates":
+            recs.append(
+                f"{action.rows_affected} duplicate row(s) were removed. "
+                "Confirm they were not legitimate repeat records."
+            )
+        elif action.action == "drop_column":
+            recs.append(
+                f"'{action.column}' was dropped for being mostly empty. "
+                "Check whether the source system is supposed to fill it."
+            )
+        elif action.action in ("impute_median", "impute_mode"):
+            recs.append(
+                f"'{action.column}' had {action.rows_affected} missing value(s) filled during "
+                "cleaning. Worth finding out why they were missing."
+            )
+
+    for issue in result.quality_issues:
+        if issue.category == "outliers":
+            recs.append(
+                f"Review the {issue.details.get('outlier_count')} outlier(s) in '{issue.column}' "
+                "before relying on its average."
+            )
+        elif issue.category == "constant":
+            recs.append(f"'{issue.column}' holds a single value, so it adds nothing to the analysis.")
+
+    if not recs:
+        recs.append("No data quality problems were found, so the figures can be read as they are.")
+    return recs[:MAX_RECOMMENDATIONS]
+
+
+def rule_based_answer(result: AnalysisResult, *, configured: bool = False) -> QuestionResponse:
+    highlights = "\n".join(f"- {i.message}" for i in result.rule_insights[:6])
+    return QuestionResponse(
+        answer=(
+            "Free-form questions need an LLM API key on the server, and none is set. "
+            "Here is what the analysis found:\n"
+            f"{highlights or '- No insights were generated for this file.'}"
         ),
-        chart_explanations=chart_notes,
-        analysis_summary=(
-            "[Llama placeholder] Rule-based insights from the analysis pipeline:\n"
-            f"{insight_lines or '- No insights generated.'}"
-        ),
-        recommendations=[
-            "[Llama placeholder] Review columns with high missingness.",
-            "[Llama placeholder] Validate outliers before acting on them.",
-            "Set ADA_LLAMA_API_KEY to enable AI-generated recommendations.",
-        ],
         configured=configured,
     )
 
@@ -86,37 +116,20 @@ def _placeholder_explanation(
 async def explain_analysis(result: AnalysisResult) -> LlamaExplanation:
     configured = is_llama_configured()
     if not configured:
-        return _placeholder_explanation(result, configured=False)
+        return rule_based_explanation(result, configured=False)
 
     # TODO: Call Meta Llama 4 Scout API with structured context from
     # build_ask_context(result) plus chart metadata. Keep prompts focused on
-    # explanation only — do not ask the model to compute statistics.
-    return _placeholder_explanation(result, configured=True)
+    # explanation only, and never ask the model to compute statistics.
+    return rule_based_explanation(result, configured=True)
 
 
 async def answer_question(result: AnalysisResult, question: str) -> QuestionResponse:
     if not is_llama_configured():
-        context = build_ask_context(result)
-        return QuestionResponse(
-            answer=(
-                "[Llama placeholder] Llama is not configured yet. "
-                f"Your question was: \"{question}\"\n\n"
-                "Facts available to the model once connected:\n"
-                f"- File: {context.filename}, shape {context.shape}\n"
-                f"- Columns: {', '.join(context.column_names[:15])}"
-                f"{'...' if len(context.column_names) > 15 else ''}\n"
-                f"- Sample insights:\n"
-                + "\n".join(f"  • {m}" for m in context.top_insights[:5])
-                + "\n\nSet ADA_LLAMA_API_KEY to get natural-language answers."
-            ),
-            configured=False,
-        )
+        return rule_based_answer(result, configured=False)
 
-    # TODO: RAG-style prompt: question + AskContext + optional chart summaries
-    return QuestionResponse(
-        answer="[Llama] API key present but client not implemented yet.",
-        configured=True,
-    )
+    # TODO: grounded prompt: question + AskContext + optional chart summaries
+    return rule_based_answer(result, configured=True)
 
 
 def llama_payload_for_debug(result: AnalysisResult) -> dict[str, Any]:

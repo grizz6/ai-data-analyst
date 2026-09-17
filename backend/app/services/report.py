@@ -12,9 +12,22 @@ _env = Environment(
 )
 
 
+def format_number(value) -> str:
+    """Readable figure for tables: thousands separators, at most 4 decimals, no trailing zeros."""
+    if value is None:
+        return ""
+    if isinstance(value, int) or float(value).is_integer():
+        return f"{int(value):,}"
+    return f"{value:,.4f}".rstrip("0").rstrip(".")
+
+
+_env.filters["num"] = format_number
+
+
 def render_html_report(result: AnalysisResult) -> str:
     template = _env.get_template("report.html")
     return template.render(
         result=result,
+        chart_notes={e["chart_id"]: e["explanation"] for e in result.llama.chart_explanations},
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
     )

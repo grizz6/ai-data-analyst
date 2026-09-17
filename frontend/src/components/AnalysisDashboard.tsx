@@ -35,11 +35,7 @@ export default function AnalysisDashboard({ result }: Props) {
         <strong>Session:</strong> {result.session_id.slice(0, 8)}… ·{" "}
         <strong>File:</strong> {result.filename}
         {!result.llama.configured && (
-          <>
-            {" "}
-            · Llama explanations use placeholders until{" "}
-            <code>ADA_LLAMA_API_KEY</code> is set on the server.
-          </>
+          <> · Summaries are rule-based because no LLM API key is set on the server.</>
         )}
       </div>
 
@@ -77,7 +73,7 @@ export default function AnalysisDashboard({ result }: Props) {
       </div>
 
       <div className="panel">
-        <h2>AI summary (Llama)</h2>
+        <h2>Summary {result.llama.configured ? "(LLM)" : "(rule-based)"}</h2>
         <p>{result.llama.dataset_overview}</p>
         <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Analysis summary</h3>
         <p style={{ whiteSpace: "pre-wrap" }}>{result.llama.analysis_summary}</p>
@@ -129,7 +125,7 @@ export default function AnalysisDashboard({ result }: Props) {
         <ul className="insight-list">
           {result.rule_insights.map((insight, i) => (
             <li key={i}>
-              <strong>{insight.title}</strong> — {insight.message}
+              <strong>{insight.title}:</strong> {insight.message}
             </li>
           ))}
         </ul>
@@ -199,8 +195,8 @@ export default function AnalysisDashboard({ result }: Props) {
       <div className="panel">
         <h2>Ask a question</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
-          Questions are answered using pre-computed analysis facts. Llama will provide
-          natural-language answers once the API key is configured.
+          Questions are answered from the pre-computed analysis facts. Free-form answers
+          need an LLM API key on the server; without one you get the key findings.
         </p>
         <div className="qa-box">
           <textarea
