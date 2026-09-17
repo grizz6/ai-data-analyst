@@ -273,6 +273,15 @@ table.data th {
   color: var(--accent);
 }
 
+.sheet-select {
+  font: inherit;
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .loading {
   text-align: center;
   padding: 2rem;

@@ -84,6 +84,8 @@ class LlamaExplanation(BaseModel):
 class AnalysisResult(BaseModel):
     session_id: str
     filename: str
+    sheet_name: str | None = None
+    available_sheets: list[str] = Field(default_factory=list)
     row_count: int
     column_count: int
     columns: list[ColumnProfile]

@@ -76,6 +76,8 @@ export interface LlamaExplanation {
 export interface AnalysisResult {
   session_id: string;
   filename: string;
+  sheet_name: string | null;
+  available_sheets: string[];
   row_count: number;
   column_count: number;
   columns: ColumnProfile[];

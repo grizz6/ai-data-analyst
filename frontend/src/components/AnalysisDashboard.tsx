@@ -6,9 +6,11 @@ import DataTable from "./DataTable";
 
 interface Props {
   result: AnalysisResult;
+  loading?: boolean;
+  onAnalyzeSheet?: (sheet: string) => void;
 }
 
-export default function AnalysisDashboard({ result }: Props) {
+export default function AnalysisDashboard({ result, loading = false, onAnalyzeSheet }: Props) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -34,6 +36,27 @@ export default function AnalysisDashboard({ result }: Props) {
       <div className="banner">
         <strong>Session:</strong> {result.session_id.slice(0, 8)}… ·{" "}
         <strong>File:</strong> {result.filename}
+        {result.sheet_name && (
+          <>
+            {" "}· <strong>Sheet:</strong>{" "}
+            {result.available_sheets.length > 1 && onAnalyzeSheet ? (
+              <select
+                className="sheet-select"
+                value={result.sheet_name}
+                disabled={loading}
+                onChange={(e) => onAnalyzeSheet(e.target.value)}
+              >
+                {result.available_sheets.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              result.sheet_name
+            )}
+          </>
+        )}
         {!result.llama.configured && (
           <> · Summaries are rule-based because no LLM API key is set on the server.</>
         )}

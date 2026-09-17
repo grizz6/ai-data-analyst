@@ -9,9 +9,9 @@ in it is copied from the analysis result rather than produced here.
 The model client (Meta Llama 4 Scout) is still a TODO below.
 """
 
-import os
 from typing import Any
 
+from app.config import settings
 from app.models.schemas import AnalysisResult, AskContext, LlamaExplanation, QuestionResponse
 
 HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
@@ -19,7 +19,7 @@ MAX_RECOMMENDATIONS = 6
 
 
 def is_llama_configured() -> bool:
-    return bool(os.getenv("ADA_LLAMA_API_KEY", "").strip())
+    return settings.llm_configured
 
 
 def build_ask_context(result: AnalysisResult) -> AskContext:

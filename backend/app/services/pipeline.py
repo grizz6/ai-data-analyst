@@ -2,7 +2,7 @@ import uuid
 
 from starlette.concurrency import run_in_threadpool
 
-from app.models.schemas import AnalysisResult, LlamaExplanation
+from app.models.schemas import AnalysisResult, LlamaExplanation, RuleInsight
 from app.services import (
     analysis,
     charts,
@@ -17,18 +17,21 @@ from app.services import (
 from app.services.ingestion import df_preview_records
 
 
-async def run_full_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
+async def run_full_analysis(
+    file_bytes: bytes, filename: str, sheet: str | None = None
+) -> AnalysisResult:
     # Pandas work is CPU-bound and would block every other request if run on
     # the event loop, so it runs in a worker thread. Only the explanation
     # step, which waits on network I/O, runs on the loop.
-    result = await run_in_threadpool(compute_analysis, file_bytes, filename)
+    result = await run_in_threadpool(compute_analysis, file_bytes, filename, sheet)
     explanation = await llama.explain_analysis(result)
     return result.model_copy(update={"llama": explanation})
 
 
-def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
+def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None) -> AnalysisResult:
     """Every number in the result is computed here, synchronously."""
-    raw_df = ingestion.load_dataframe(file_bytes, filename)
+    table = ingestion.load_table(file_bytes, filename, sheet)
+    raw_df = table.df
     identifiers = semantics.identifier_columns(raw_df)
     quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
 
@@ -56,6 +59,19 @@ def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
         trends,
         identifiers=identifiers,
     )
+    other_sheets = [s for s in table.available_sheets if s != table.sheet]
+    if other_sheets:
+        rule_insights.insert(
+            1,
+            RuleInsight(
+                category="overview",
+                title="Workbook sheets",
+                message=(
+                    f"Analyzed sheet '{table.sheet}'. The workbook also has "
+                    f"{', '.join(repr(s) for s in other_sheets)}, which can be analyzed separately."
+                ),
+            ),
+        )
 
     empty_explanation = LlamaExplanation(
         dataset_overview="",
@@ -68,6 +84,8 @@ def compute_analysis(file_bytes: bytes, filename: str) -> AnalysisResult:
     return AnalysisResult(
         session_id=str(uuid.uuid4()),
         filename=filename,
+        sheet_name=table.sheet,
+        available_sheets=table.available_sheets,
         row_count=len(prepared_df),
         column_count=len(prepared_df.columns),
         columns=columns,

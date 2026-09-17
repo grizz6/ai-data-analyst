@@ -6,15 +6,17 @@ import type { AnalysisResult } from "./types";
 
 export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  // Kept so another sheet of the same workbook can be analyzed without re-picking the file.
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleUpload = async (file: File) => {
+  const analyze = async (target: File, sheet?: string) => {
     setLoading(true);
     setError(null);
-    setResult(null);
     try {
-      const data = await uploadDataset(file);
+      const data = await uploadDataset(target, sheet);
+      setFile(target);
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -37,7 +39,7 @@ export default function App() {
       {!result && (
         <div className="panel">
           <h2>Upload dataset</h2>
-          <UploadPanel onUpload={handleUpload} onReject={setError} loading={loading} />
+          <UploadPanel onUpload={(f) => analyze(f)} onReject={setError} loading={loading} />
           {error && <p className="error-msg">{error}</p>}
           {loading && <p className="loading">Running analysis pipeline…</p>}
         </div>
@@ -51,13 +53,20 @@ export default function App() {
               className="btn secondary"
               onClick={() => {
                 setResult(null);
+                setFile(null);
                 setError(null);
               }}
             >
               Upload another file
             </button>
           </div>
-          <AnalysisDashboard result={result} />
+          {error && <p className="error-msg">{error}</p>}
+          <AnalysisDashboard
+            key={result.session_id}
+            result={result}
+            loading={loading}
+            onAnalyzeSheet={file ? (sheet) => analyze(file, sheet) : undefined}
+          />
         </>
       )}
     </div>

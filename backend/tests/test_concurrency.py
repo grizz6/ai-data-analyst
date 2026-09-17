@@ -12,9 +12,9 @@ SLOW_SECONDS = 0.6
 def test_health_stays_responsive_while_a_file_is_being_analyzed(monkeypatch, sample_csv_bytes):
     real_compute = pipeline.compute_analysis
 
-    def slow_compute(file_bytes, filename):
+    def slow_compute(*args):
         time.sleep(SLOW_SECONDS)  # blocking, like a big pandas job
-        return real_compute(file_bytes, filename)
+        return real_compute(*args)
 
     monkeypatch.setattr(pipeline, "compute_analysis", slow_compute)
 

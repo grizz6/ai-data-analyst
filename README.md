@@ -36,7 +36,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 
 | Step | Module | What it does |
 |------|--------|----------------|
-| 1 | `ingestion.py` | Reads CSV/Excel into a DataFrame and strips whitespace from column names |
+| 1 | `ingestion.py` | Reads CSV (detects UTF-8, Windows-1252, or Latin-1 text and comma, semicolon, tab, or pipe delimiters) or Excel (first sheet with data, or a named sheet) into a DataFrame and strips whitespace from column names |
 | 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
 | 2 | `quality.py` | Flags duplicates, missing values, constant columns, and IQR outliers, each with a severity |
 | 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
@@ -65,13 +65,15 @@ Open **http://127.0.0.1:8000/docs**, expand `POST /api/upload`, and upload `samp
 
 ### Configuration
 
-Settings come from environment variables with the `ADA_` prefix (`backend/app/config.py`):
+Settings come from environment variables with the `ADA_` prefix, or from `backend/.env` (copy `backend/.env.example`). See `backend/app/config.py`.
 
 | Variable | Default | Effect |
 |---|---|---|
 | `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
-| `ADA_LLAMA_API_KEY` | unset | Flips `llama_configured` to true (the client itself isn't implemented yet) |
+| `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
+| `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
+| `ADA_LLM_MODEL` | `meta-llama/llama-4-scout-17b-16e-instruct` | Model name at that endpoint |
 
 ---
 
@@ -79,11 +81,13 @@ Settings come from environment variables with the `ADA_` prefix (`backend/app/co
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/upload` | Upload a file and run the full pipeline |
+| `POST` | `/api/upload` | Upload a file and run the full pipeline. For Excel, `?sheet=NAME` picks a sheet; otherwise the first sheet with data is used |
 | `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
-| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data (placeholder answer for now) |
+| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data (returns the key findings until an LLM key is set) |
 | `GET` | `/api/sessions/{id}/report` | Download the HTML report |
-| `GET` | `/api/health` | Status, upload limit, and whether a Llama key is set |
+| `GET` | `/api/health` | Status, upload limit, and whether an LLM key is set |
+
+Problems with the file itself (empty, unreadable, bad sheet name) return 400 with a plain explanation. Unexpected server errors return 500 with a short reference code; the details go to the server log only.
 
 ---
 

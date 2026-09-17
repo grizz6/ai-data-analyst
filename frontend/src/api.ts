@@ -1,10 +1,11 @@
 import type { AnalysisResult, QuestionResponse } from "./types";
 
-export async function uploadDataset(file: File): Promise<AnalysisResult> {
+export async function uploadDataset(file: File, sheet?: string): Promise<AnalysisResult> {
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch("/api/upload", { method: "POST", body: form });
+  const query = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Upload failed");

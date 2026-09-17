@@ -4,8 +4,19 @@ Each test asserts the pipeline finds exactly what was planted, no more and
 no less.
 """
 
+from io import BytesIO
+
 import numpy as np
 import pandas as pd
+
+
+def workbook(**sheets: pd.DataFrame) -> bytes:
+    """An .xlsx file with one sheet per keyword argument, in order."""
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer) as writer:
+        for name, df in sheets.items():
+            df.to_excel(writer, sheet_name=name, index=False)
+    return buffer.getvalue()
 
 
 def with_nulls(n: int, null_count: int) -> list[float | None]:

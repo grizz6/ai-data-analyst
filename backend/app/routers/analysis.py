@@ -1,13 +1,18 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile
+import logging
+import uuid
+
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models.schemas import QuestionRequest, QuestionResponse
 from app.services import llama, report
+from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import get, save
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
@@ -35,7 +40,10 @@ async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
 
 
 @router.post("/upload")
-async def upload_dataset(file: UploadFile = File(...)):
+async def upload_dataset(
+    file: UploadFile = File(...),
+    sheet: str | None = Query(default=None, description="Excel only: which sheet to analyze."),
+):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required.")
 
@@ -51,11 +59,19 @@ async def upload_dataset(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="The file is empty.")
 
     try:
-        result = await run_full_analysis(content, file.filename)
-    except ValueError as exc:
+        result = await run_full_analysis(content, file.filename, sheet)
+    except DatasetError as exc:
+        # Our own messages about the file itself, written for the user.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}") from exc
+        # Anything else is a bug. The exception text can hold paths or data
+        # values, so it goes to the log under a reference, not to the client.
+        reference = uuid.uuid4().hex[:8]
+        logger.exception("Analysis failed for %r (reference %s)", file.filename, reference)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed because of a server error. Reference: {reference}.",
+        ) from exc
 
     save(result)
     return result.model_dump(mode="json")

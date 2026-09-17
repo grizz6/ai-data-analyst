@@ -1,3 +1,9 @@
+import pandas as pd
+
+from app.services import pipeline
+from tests.builders import workbook
+
+
 def upload(client, content: bytes, filename: str):
     return client.post("/api/upload", files={"file": (filename, content, "text/csv")})
 
@@ -42,6 +48,31 @@ def test_blank_question_is_rejected(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes, "sales_sample.csv").json()["session_id"]
     res = client.post(f"/api/sessions/{session_id}/ask", json={"question": "   "})
     assert res.status_code == 400
+
+
+def test_excel_sheet_can_be_chosen_by_query_parameter(client):
+    data = workbook(Sales=pd.DataFrame({"v": range(5)}), Costs=pd.DataFrame({"c": range(8)}))
+    files = {"file": ("book.xlsx", data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+    default = client.post("/api/upload", files=files).json()
+    assert (default["sheet_name"], default["row_count"]) == ("Sales", 5)
+    assert default["available_sheets"] == ["Sales", "Costs"]
+    assert any("also has 'Costs'" in i["message"] for i in default["rule_insights"])
+
+    chosen = client.post("/api/upload", params={"sheet": "Costs"}, files=files).json()
+    assert (chosen["sheet_name"], chosen["row_count"]) == ("Costs", 8)
+
+
+def test_unexpected_errors_do_not_leak_details(client, sample_csv_bytes, monkeypatch):
+    def broken(*args):
+        raise RuntimeError("/Users/someone/private/path exploded")
+
+    monkeypatch.setattr(pipeline, "compute_analysis", broken)
+    res = upload(client, sample_csv_bytes, "sales_sample.csv")
+
+    assert res.status_code == 500
+    assert "private" not in res.json()["detail"]
+    assert "Reference:" in res.json()["detail"]
 
 
 def test_report_downloads_as_html_attachment(client, sample_csv_bytes):

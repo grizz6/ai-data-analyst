@@ -3,13 +3,46 @@ from io import BytesIO
 import pandas as pd
 import pytest
 
-from app.services.ingestion import df_preview_records, load_dataframe
+from app.services.ingestion import DatasetError, df_preview_records, load_dataframe, load_table
+from tests.builders import workbook
 
 
 def test_csv_is_loaded_and_column_names_are_stripped():
     df = load_dataframe(b" region , sales\nWest,10\nEast,20\n", "data.csv")
     assert list(df.columns) == ["region", "sales"]
     assert len(df) == 2
+
+
+@pytest.mark.parametrize("delimiter", [";", "\t", "|"])
+def test_csv_delimiter_is_detected(delimiter):
+    text = f"region{delimiter}sales\nWest{delimiter}10\nEast{delimiter}20\n"
+    df = load_dataframe(text.encode(), "data.csv")
+    assert list(df.columns) == ["region", "sales"]
+    assert df["sales"].tolist() == [10, 20]
+
+
+def test_quoted_commas_do_not_confuse_delimiter_detection():
+    df = load_dataframe(b'name,city\n"Smith, Jo","Austin, TX"\n"Lee, Al","Reno, NV"\n', "data.csv")
+    assert df.loc[0, "city"] == "Austin, TX"
+
+
+@pytest.mark.parametrize(
+    ("encoded", "label"),
+    [
+        ("﻿café,price\nlatte,4\n".encode("utf-8"), "utf-8 with BOM"),
+        ("café,price\nlatte,4\n".encode("cp1252"), "Windows-1252 (Excel on Windows)"),
+        ("café,price\ncrème brûlée,4\n".encode("latin-1"), "Latin-1"),
+    ],
+)
+def test_csv_encodings_are_detected(encoded, label):
+    df = load_dataframe(encoded, "data.csv")
+    assert list(df.columns) == ["café", "price"], label
+
+
+@pytest.mark.parametrize("content", [b"", b"   \n\n"])
+def test_empty_csv_raises_dataset_error(content):
+    with pytest.raises(DatasetError, match="empty"):
+        load_dataframe(content, "data.csv")
 
 
 def test_xlsx_is_loaded():
@@ -20,8 +53,34 @@ def test_xlsx_is_loaded():
     assert len(df) == 2
 
 
-def test_unsupported_suffix_raises_value_error():
-    with pytest.raises(ValueError, match="Unsupported file type"):
+def test_first_sheet_with_data_is_chosen_and_all_sheets_are_listed():
+    data = workbook(Notes=pd.DataFrame(), Sales=pd.DataFrame({"v": [1, 2]}), Costs=pd.DataFrame({"c": [3]}))
+    table = load_table(data, "book.xlsx")
+    assert table.sheet == "Sales"
+    assert table.available_sheets == ["Notes", "Sales", "Costs"]
+    assert table.df["v"].tolist() == [1, 2]
+
+
+def test_requested_sheet_is_loaded():
+    data = workbook(Sales=pd.DataFrame({"v": [1]}), Costs=pd.DataFrame({"c": [3, 4]}))
+    table = load_table(data, "book.xlsx", sheet="Costs")
+    assert table.sheet == "Costs"
+    assert table.df["c"].tolist() == [3, 4]
+
+
+def test_missing_sheet_names_the_ones_that_exist():
+    data = workbook(Sales=pd.DataFrame({"v": [1]}))
+    with pytest.raises(DatasetError, match="Sheet 'Q3' not found. This workbook has: Sales."):
+        load_table(data, "book.xlsx", sheet="Q3")
+
+
+def test_corrupt_excel_raises_dataset_error():
+    with pytest.raises(DatasetError, match="couldn't be opened"):
+        load_dataframe(b"not really a workbook", "book.xlsx")
+
+
+def test_unsupported_suffix_raises_dataset_error():
+    with pytest.raises(DatasetError, match="Unsupported file type"):
         load_dataframe(b"{}", "data.json")
 
 

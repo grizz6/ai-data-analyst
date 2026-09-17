@@ -3,6 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
+from app.config import settings
 from app.services.llama import explain_analysis
 from app.services.pipeline import run_full_analysis
 from app.services.report import format_number, render_html_report
@@ -11,7 +12,7 @@ from tests.builders import with_outliers
 
 @pytest.fixture(autouse=True)
 def no_llm_key(monkeypatch):
-    monkeypatch.delenv("ADA_LLAMA_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "llm_api_key", "")
 
 
 def analyze(df: pd.DataFrame, filename: str = "planted.csv"):
