@@ -24,6 +24,37 @@ def test_charts_cover_each_column_kind_and_respect_the_cap():
     assert all("data" in c.plotly_json for c in charts)
 
 
+def chart(df, chart_type):
+    return next(c for c in build_charts(df) if c.chart_type == chart_type)
+
+
+def test_scatter_plots_the_most_correlated_pair_not_the_first_two_columns():
+    x, y = correlated_pair(80, 0.95, seed=4)
+    noise, _ = correlated_pair(80, 0.0, seed=5)
+    df = pd.DataFrame({"x": x, "noise": noise, "y": y})
+    assert chart(df, "scatter").title == "x vs y"
+
+
+def test_box_plot_gives_each_column_its_own_axis():
+    df = pd.DataFrame({"sales": [9000.0, 12000, 15000, 11000], "units": [90.0, 120, 150, 110]})
+    fig = chart(df, "box").plotly_json
+    assert [t["name"] for t in fig["data"]] == ["sales", "units"]
+    assert {t["yaxis"] for t in fig["data"]} == {"y", "y2"}
+
+
+def test_mostly_unique_text_gets_no_bar_chart():
+    n = 80
+    df = pd.DataFrame(
+        {
+            "customer_name": [f"Customer {i}" for i in range(n)],
+            "region": ["West", "East", "North", "South"] * (n // 4),
+            "spend": range(n),
+        }
+    )
+    bars = [c.title for c in build_charts(df) if c.chart_type == "bar"]
+    assert bars == ["Top categories in region"]
+
+
 def timeseries_chart(df):
     return next(c for c in build_charts(df) if c.chart_type == "line")
 

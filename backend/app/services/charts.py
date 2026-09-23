@@ -1,6 +1,7 @@
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from app.models.schemas import ChartSpec
 from app.utils.json_compat import plotly_figure_to_dict
@@ -8,6 +9,12 @@ from app.utils.json_compat import plotly_figure_to_dict
 CHART_ROW_LIMIT = 50_000
 TIME_BUCKET_LIMIT = 366
 MARKER_POINT_LIMIT = 60
+BOX_PLOT_COLUMNS = 4
+# A text column is worth a bar chart only if its values repeat. Past this many distinct
+# values, and when most rows are unique, it's a name or free text, not a category.
+CATEGORY_MAX_UNIQUE = 50
+CATEGORY_MAX_UNIQUE_SHARE = 0.5
+MIN_PAIRED_ROWS = 3
 
 # Smallest bucket that keeps the line under TIME_BUCKET_LIMIT points.
 _TIME_BUCKETS = (
@@ -34,6 +41,38 @@ def _time_bucket(dates: pd.Series) -> tuple[str, str]:
     return freq, label
 
 
+def _is_chartable_category(series: pd.Series) -> bool:
+    values = series.dropna()
+    unique = values.nunique()
+    if unique < 2:
+        return False
+    return unique <= CATEGORY_MAX_UNIQUE or unique / len(values) <= CATEGORY_MAX_UNIQUE_SHARE
+
+
+def _strongest_pair(df: pd.DataFrame, numeric_cols: list) -> tuple[str, str]:
+    """The two numeric columns with the largest absolute correlation, first two as a fallback."""
+    corr = df[numeric_cols].corr(min_periods=MIN_PAIRED_ROWS).abs()
+    best, best_value = (numeric_cols[0], numeric_cols[1]), -1.0
+    for i, a in enumerate(numeric_cols):
+        for b in numeric_cols[i + 1 :]:
+            value = corr.loc[a, b]
+            if pd.notna(value) and value > best_value:
+                best, best_value = (a, b), value
+    return best
+
+
+def _box_per_column(df: pd.DataFrame, numeric_cols: list):
+    """One box per column, each on its own y axis, so small-scale columns stay readable."""
+    cols = [c for c in numeric_cols if df[c].notna().any()][:BOX_PLOT_COLUMNS]
+    if not cols:
+        return None
+    fig = make_subplots(rows=1, cols=len(cols), subplot_titles=[str(c) for c in cols])
+    for i, col in enumerate(cols, start=1):
+        fig.add_trace(go.Box(y=df[col].dropna(), name=str(col), showlegend=False), row=1, col=i)
+    fig.update_layout(title="Numeric distributions (each on its own scale)")
+    return fig
+
+
 def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
     df = _sample_for_charts(df)
     charts: list[ChartSpec] = []
@@ -41,7 +80,9 @@ def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
     cat_cols = [
         c
         for c in df.columns
-        if c not in numeric_cols and not pd.api.types.is_datetime64_any_dtype(df[c])
+        if c not in numeric_cols
+        and not pd.api.types.is_datetime64_any_dtype(df[c])
+        and _is_chartable_category(df[c])
     ]
     date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
 
@@ -74,17 +115,13 @@ def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
         )
 
     if len(numeric_cols) >= 2:
-        fig = px.scatter(
-            df,
-            x=numeric_cols[0],
-            y=numeric_cols[1],
-            title=f"{numeric_cols[0]} vs {numeric_cols[1]}",
-            opacity=0.6,
-        )
+        x_col, y_col = _strongest_pair(df, numeric_cols)
+        title = f"{x_col} vs {y_col}"
+        fig = px.scatter(df, x=x_col, y=y_col, title=title, opacity=0.6)
         charts.append(
             ChartSpec(
                 id="scatter_pair",
-                title=f"{numeric_cols[0]} vs {numeric_cols[1]}",
+                title=title,
                 chart_type="scatter",
                 plotly_json=plotly_figure_to_dict(fig),
             )
@@ -141,17 +178,15 @@ def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
                     )
                 )
 
-    if numeric_cols:
-        melted = df[numeric_cols].melt(var_name="column", value_name="value").dropna()
-        if not melted.empty:
-            fig = px.box(melted, x="column", y="value", title="Numeric distributions (box plot)")
-            charts.append(
-                ChartSpec(
-                    id="box_numeric",
-                    title="Numeric distributions",
-                    chart_type="box",
-                    plotly_json=plotly_figure_to_dict(fig),
-                )
+    box = _box_per_column(df, numeric_cols)
+    if box is not None:
+        charts.append(
+            ChartSpec(
+                id="box_numeric",
+                title="Numeric distributions",
+                chart_type="box",
+                plotly_json=plotly_figure_to_dict(box),
             )
+        )
 
     return charts[:max_charts]
