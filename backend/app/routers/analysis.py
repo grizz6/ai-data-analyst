@@ -54,7 +54,7 @@ async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=AnalysisResult)
 async def upload_dataset(
     file: UploadFile = File(...),
     sheet: str | None = Query(default=None, description="Excel only: which sheet to analyze."),
@@ -89,13 +89,12 @@ async def upload_dataset(
         ) from exc
 
     save(result)
-    return result.model_dump(mode="json")
+    return result
 
 
-@router.get("/sessions/{session_id}")
+@router.get("/sessions/{session_id}", response_model=AnalysisResult)
 async def get_session(session_id: str):
-    result = session_or_404(session_id)
-    return result.model_dump(mode="json")
+    return session_or_404(session_id)
 
 
 @router.post("/sessions/{session_id}/ask", response_model=QuestionResponse)

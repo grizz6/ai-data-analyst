@@ -1,9 +1,20 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 
-class ColumnProfile(BaseModel):
+class ApiModel(BaseModel):
+    """Base for everything the API returns.
+
+    Fields with defaults are always present in responses, so the OpenAPI schema
+    marks them required. That keeps the generated TypeScript types from calling
+    them optional.
+    """
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
+class ColumnProfile(ApiModel):
     name: str
     dtype: str
     non_null_count: int
@@ -14,7 +25,7 @@ class ColumnProfile(BaseModel):
     is_identifier: bool = False
 
 
-class QualityIssue(BaseModel):
+class QualityIssue(ApiModel):
     severity: str
     category: str
     column: str | None = None
@@ -22,14 +33,14 @@ class QualityIssue(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-class CleaningAction(BaseModel):
+class CleaningAction(ApiModel):
     action: str
     column: str | None = None
     description: str
     rows_affected: int | None = None
 
 
-class NumericSummary(BaseModel):
+class NumericSummary(ApiModel):
     column: str
     count: int
     mean: float | None
@@ -41,12 +52,12 @@ class NumericSummary(BaseModel):
     max: float | None
 
 
-class CategoricalSummary(BaseModel):
+class CategoricalSummary(ApiModel):
     column: str
     top_values: list[dict[str, Any]]
 
 
-class CorrelationPair(BaseModel):
+class CorrelationPair(ApiModel):
     column_a: str
     column_b: str
     correlation: float
@@ -54,7 +65,7 @@ class CorrelationPair(BaseModel):
     p_value: float | None = None  # two-sided, H0: no linear relationship
 
 
-class TrendInsight(BaseModel):
+class TrendInsight(ApiModel):
     column: str
     direction: str
     change_pct: float | None
@@ -64,14 +75,14 @@ class TrendInsight(BaseModel):
     p_value: float | None = None  # two-sided, H0: slope is zero
 
 
-class RuleInsight(BaseModel):
+class RuleInsight(ApiModel):
     category: str
     title: str
     message: str
     severity: str = "info"
 
 
-class ChartSpec(BaseModel):
+class ChartSpec(ApiModel):
     id: str
     title: str
     chart_type: str
@@ -81,7 +92,7 @@ class ChartSpec(BaseModel):
 ExplanationSource = Literal["rule_based", "llm"]
 
 
-class LlamaExplanation(BaseModel):
+class LlamaExplanation(ApiModel):
     dataset_overview: str
     chart_explanations: list[dict[str, str]]
     analysis_summary: str
@@ -94,7 +105,7 @@ class LlamaExplanation(BaseModel):
     fallback_reason: str | None = None
 
 
-class ModelExplanation(BaseModel):
+class ModelExplanation(ApiModel):
     """The JSON shape the model is asked to return, validated before use."""
 
     dataset_overview: str = Field(min_length=1)
@@ -103,11 +114,11 @@ class ModelExplanation(BaseModel):
     chart_explanations: list[dict[str, str]] = Field(default_factory=list)
 
 
-class ModelAnswer(BaseModel):
+class ModelAnswer(ApiModel):
     answer: str = Field(min_length=1)
 
 
-class AnalysisResult(BaseModel):
+class AnalysisResult(ApiModel):
     session_id: str
     filename: str
     sheet_name: str | None = None
@@ -136,11 +147,11 @@ class AnalysisResult(BaseModel):
         return self._cleaned_csv
 
 
-class QuestionRequest(BaseModel):
+class QuestionRequest(ApiModel):
     question: str
 
 
-class QuestionResponse(BaseModel):
+class QuestionResponse(ApiModel):
     answer: str
     configured: bool = False
     source: ExplanationSource = "rule_based"

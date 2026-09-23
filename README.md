@@ -86,6 +86,16 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
+### API types
+
+The frontend's TypeScript types are generated from the backend's Pydantic models, not written by hand. After changing anything in `backend/app/models/schemas.py`, run:
+
+```bash
+./scripts/gen-api-types.sh
+```
+
+It exports FastAPI's OpenAPI schema and turns it into `frontend/src/generated/api-schema.ts` with `openapi-typescript`. CI regenerates the file and fails if the committed copy is stale.
+
 ### Configuration
 
 Settings come from environment variables with the `ADA_` prefix, or from `backend/.env` (copy `backend/.env.example`). See `backend/app/config.py`.

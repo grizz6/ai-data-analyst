@@ -1,116 +1,25 @@
-export interface ColumnProfile {
-  name: string;
-  dtype: string;
-  non_null_count: number;
-  null_count: number;
-  null_pct: number;
-  unique_count: number;
-  sample_values: unknown[];
-  is_identifier: boolean;
-}
+/**
+ * API types, generated from the backend's OpenAPI schema.
+ *
+ * Don't edit shapes here. Change the Pydantic models in
+ * backend/app/models/schemas.py and run scripts/gen-api-types.sh;
+ * CI fails if src/generated/api-schema.ts is out of date.
+ */
+import type { components } from "./generated/api-schema";
 
-export interface QualityIssue {
-  severity: string;
-  category: string;
-  column?: string | null;
-  message: string;
-}
+type Schemas = components["schemas"];
 
-export interface CleaningAction {
-  action: string;
-  column?: string | null;
-  description: string;
-  rows_affected?: number | null;
-}
+export type AnalysisResult = Schemas["AnalysisResult"];
+export type CategoricalSummary = Schemas["CategoricalSummary"];
+export type ChartSpec = Schemas["ChartSpec"];
+export type CleaningAction = Schemas["CleaningAction"];
+export type ColumnProfile = Schemas["ColumnProfile"];
+export type CorrelationPair = Schemas["CorrelationPair"];
+export type LlamaExplanation = Schemas["LlamaExplanation"];
+export type NumericSummary = Schemas["NumericSummary"];
+export type QualityIssue = Schemas["QualityIssue"];
+export type QuestionResponse = Schemas["QuestionResponse"];
+export type RuleInsight = Schemas["RuleInsight"];
+export type TrendInsight = Schemas["TrendInsight"];
 
-export interface NumericSummary {
-  column: string;
-  count: number;
-  mean: number | null;
-  std: number | null;
-  min: number | null;
-  median: number | null;
-  max: number | null;
-}
-
-export interface CategoricalSummary {
-  column: string;
-  top_values: { value: string; count: number }[];
-}
-
-export interface CorrelationPair {
-  column_a: string;
-  column_b: string;
-  correlation: number;
-  /** Rows where both columns have a value. */
-  n: number;
-  /** Two-sided p-value for "no linear relationship". */
-  p_value: number | null;
-}
-
-export interface TrendInsight {
-  column: string;
-  direction: string;
-  change_pct: number | null;
-  message: string;
-  slope: number | null;
-  slope_unit: "day" | "month" | "row" | null;
-  p_value: number | null;
-}
-
-export interface RuleInsight {
-  category: string;
-  title: string;
-  message: string;
-  severity?: string;
-}
-
-export interface ChartSpec {
-  id: string;
-  title: string;
-  chart_type: string;
-  plotly_json: Record<string, unknown>;
-}
-
-export type ExplanationSource = "rule_based" | "llm";
-
-export interface LlamaExplanation {
-  dataset_overview: string;
-  chart_explanations: { chart_id: string; explanation: string }[];
-  analysis_summary: string;
-  recommendations: string[];
-  /** An API key is set on the server. */
-  configured: boolean;
-  /** What actually wrote the text; rule_based when the model is unset or its reply was rejected. */
-  source: ExplanationSource;
-  model: string | null;
-  fallback_reason: string | null;
-}
-
-export interface AnalysisResult {
-  session_id: string;
-  filename: string;
-  sheet_name: string | null;
-  available_sheets: string[];
-  row_count: number;
-  column_count: number;
-  columns: ColumnProfile[];
-  quality_issues: QualityIssue[];
-  cleaning_actions: CleaningAction[];
-  numeric_summaries: NumericSummary[];
-  categorical_summaries: CategoricalSummary[];
-  correlations: CorrelationPair[];
-  trends: TrendInsight[];
-  rule_insights: RuleInsight[];
-  charts: ChartSpec[];
-  llama: LlamaExplanation;
-  preview_rows: Record<string, unknown>[];
-  cleaned_preview_rows: Record<string, unknown>[];
-}
-
-export interface QuestionResponse {
-  answer: string;
-  configured: boolean;
-  source: ExplanationSource;
-  fallback_reason: string | null;
-}
+export type ExplanationSource = LlamaExplanation["source"];
