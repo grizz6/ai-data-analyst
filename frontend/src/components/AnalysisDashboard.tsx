@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { askQuestion, cleanedCsvUrl, reportDownloadUrl } from "../api";
 import type { AnalysisResult } from "../types";
-import ChartGrid from "./ChartGrid";
+// Plotly is most of the app's JavaScript. Loading it with the charts, not with
+// the upload screen, keeps the first page light.
+const ChartGrid = lazy(() => import("./ChartGrid"));
 import DataTable from "./DataTable";
 
 function formatP(p: number | null): string {
@@ -225,7 +227,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
       <div className="panel">
         <h2>Visualizations</h2>
-        <ChartGrid charts={result.charts} llama={result.llama} />
+        <Suspense fallback={<p className="muted">Loading charts…</p>}>
+          <ChartGrid charts={result.charts} llama={result.llama} />
+        </Suspense>
       </div>
 
       <div className="panel">

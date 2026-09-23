@@ -1,4 +1,9 @@
-import Plot from "react-plotly.js";
+import Plotly from "plotly.js-cartesian-dist-min";
+import createPlotlyComponent from "react-plotly.js/factory";
+
+// The default react-plotly.js import bundles all of Plotly (3D, maps, and more).
+// Every chart here is 2D, so the smaller cartesian build is enough.
+const Plot = createPlotlyComponent(Plotly);
 import type { ChartSpec, LlamaExplanation } from "../types";
 
 interface Props {
@@ -24,6 +29,9 @@ export default function ChartGrid({ charts, llama }: Props) {
             data={(chart.plotly_json as { data: object[] }).data}
             layout={{
               ...((chart.plotly_json as { layout?: object }).layout ?? {}),
+              // The card heading already shows the title, and Plotly's own would
+              // collide with per-panel labels on narrow screens.
+              title: undefined,
               paper_bgcolor: "transparent",
               plot_bgcolor: "transparent",
               font: { color: "#e8eef5", size: 11 },

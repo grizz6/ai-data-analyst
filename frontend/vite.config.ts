@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // The lazily loaded Plotly chunk is ~1.4 MB on its own; everything else is small.
+    chunkSizeWarningLimit: 1500,
+  },
   server: {
     port: 5173,
     proxy: {

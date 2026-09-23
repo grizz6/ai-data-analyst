@@ -21,10 +21,11 @@
     .badge.warning { background: #422006; color: var(--warn); }
     .badge.error { background: #450a0a; color: var(--error); }
     .note { border-left: 3px solid var(--accent); padding-left: 1rem; color: var(--muted); }
-    .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 1rem; }
+    .chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 1rem; }
     .chart-card { background: var(--card-2); border-radius: 10px; padding: 0.75rem; min-width: 0; }
     .chart-card h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
     .chart { width: 100%; height: 320px; }
+    @media (max-width: 600px) { body { padding: 1rem; } section { padding: 1rem; } }
   </style>
 </head>
 <body>
@@ -153,7 +154,7 @@
   </section>
 
   {% if result.charts %}
-  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <script src="https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js" charset="utf-8"></script>
   <script>
     (function () {
       if (!window.Plotly) return;
