@@ -16,7 +16,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | REST API + interactive docs at `/docs` | Working |
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| Tests and CI | 128 pytest tests. GitHub Actions runs them, plus a frontend type-check and build, on every push |
+| Tests and CI | 171 backend tests (pytest) and 24 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | **Not yet.** Results live in memory (`session_store.py`), expire after 60 minutes without use, are capped at 20 sessions, and disappear on restart |
 | Deployment | **Not yet.** Runs locally |
 
@@ -50,8 +50,8 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 2 | `quality.py` | Flags duplicates, missing values, constant columns, IQR outliers, numbers stored as text, and labels written more than one way, each with a severity |
 | 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns, converts numbers stored as text (`$1,200`, `45%`, `(300)`), merges labels that differ only in case or spacing (`West` / `west `), and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
 | 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
-| 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
-| 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
+| 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations with sample size and p-value, and trends with a fitted slope and p-value |
+| 6 | `charts.py` | Up to 8 Plotly charts: histograms, bar charts for real categories (not mostly-unique text such as names), a scatter of the most correlated pair, a correlation heatmap, a time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), and a box plot with one panel and axis per column |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
 | 8 | `explanation.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
 | 9 | `report.py` | Renders `templates/report.html` with Jinja2, charts included |
@@ -160,7 +160,9 @@ Problems with the file itself (empty, unreadable, bad sheet name) return 400 wit
 
 ## How it's tested
 
-`backend/tests/` builds datasets with defects planted at known positions and asserts the pipeline finds exactly those: missingness at 91 / 55 / 10%, exactly three values outside Tukey's fences, two columns constructed at r = 0.87, a series rising 30% versus one moving 2%, identifier columns, gaps in dates, several CSV encodings and delimiters, multi-sheet workbooks, and uploads just over the size limit.
+`backend/tests/` builds datasets with defects planted at known positions and asserts the pipeline finds exactly those: missingness at 91 / 55 / 10%, exactly three values outside Tukey's fences, two columns constructed at r = 0.87, a series rising 30% versus one moving 2%, a +10% change buried in noise that must stay "stable", identifier columns, gaps in dates, prices stored as `$1,234` text, labels written several ways, several CSV encodings and delimiters, multi-sheet workbooks, a crafted archive that unzips far past its size, and uploads just over the size limit. Session expiry is tested with a fake clock.
+
+`frontend/src/` tests run in a simulated browser against a real API response for the sample file: the upload size check, rule-based vs model-written summary labels, correlations shown with n and p, download links, the question flow, and an expired session. Deliberately breaking a behavior fails the test written for it.
 
 The model layer runs against `httpx.MockTransport` instead of a real provider, which scripts every failure: timeouts, 503 then success, 429 with `Retry-After`, 401, prose instead of JSON, missing fields, and replies containing made-up numbers. No test needs an API key or the network, and a fixture keeps tests off a real provider even when `backend/.env` holds a key.
 
@@ -170,10 +172,9 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 - Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
-- The box plot puts all numeric columns on one axis, so columns on small scales flatten out next to large ones.
 
 ## Built with
 
-**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, SciPy, Plotly, Jinja2, Pydantic, httpx, openpyxl, pytest.
-**Frontend:** React, TypeScript, Vite, Plotly.js.
+**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, SciPy, Plotly, Jinja2, Pydantic, httpx, openpyxl; pytest, ruff, mypy.
+**Frontend:** React, TypeScript, Vite, Plotly.js (cartesian build, lazy-loaded); Vitest, React Testing Library, ESLint, openapi-typescript.
 **CI:** GitHub Actions.
