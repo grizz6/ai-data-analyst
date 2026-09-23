@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     app_name: str = "AI Data Analyst Agent"
     max_upload_mb: int = 10
+    max_excel_unzipped_mb: int = 100
     missing_threshold_drop: float = 0.9
     session_ttl_minutes: int = 60
     max_sessions: int = 20

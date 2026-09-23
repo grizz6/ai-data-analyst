@@ -1,8 +1,10 @@
+import zipfile
 from io import BytesIO
 
 import pandas as pd
 import pytest
 
+from app.config import settings
 from app.services.ingestion import DatasetError, df_preview_records, load_dataframe, load_table
 from tests.builders import workbook
 
@@ -72,6 +74,29 @@ def test_missing_sheet_names_the_ones_that_exist():
     data = workbook(Sales=pd.DataFrame({"v": [1]}))
     with pytest.raises(DatasetError, match="Sheet 'Q3' not found. This workbook has: Sales."):
         load_table(data, "book.xlsx", sheet="Q3")
+
+
+def zip_bomb(unzipped_mb: int) -> bytes:
+    """A tiny .xlsx-shaped archive whose single entry expands to unzipped_mb."""
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", b"0" * (unzipped_mb * 1024 * 1024))
+    return buffer.getvalue()
+
+
+def test_workbook_that_expands_past_the_limit_is_refused(monkeypatch):
+    monkeypatch.setattr(settings, "max_excel_unzipped_mb", 5)
+    data = zip_bomb(6)
+    assert len(data) < 100_000  # a few KB on disk, 6 MB once opened
+
+    with pytest.raises(DatasetError, match="expands to 6 MB when opened, over the 5 MB limit"):
+        load_dataframe(data, "book.xlsx")
+
+
+def test_normal_workbook_passes_the_unzipped_size_check(monkeypatch):
+    monkeypatch.setattr(settings, "max_excel_unzipped_mb", 1)
+    data = workbook(Sales=pd.DataFrame({"v": range(100)}))
+    assert load_table(data, "book.xlsx").df["v"].sum() == 4950
 
 
 def test_corrupt_excel_raises_dataset_error():

@@ -93,6 +93,7 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | Variable | Default | Effect |
 |---|---|---|
 | `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
+| `ADA_MAX_EXCEL_UNZIPPED_MB` | `100` | An `.xlsx` is a zip archive; one that would expand past this once opened is refused before parsing, so a small upload can't unpack into gigabytes |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
 | `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |

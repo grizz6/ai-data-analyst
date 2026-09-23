@@ -1,10 +1,12 @@
 import csv
+import zipfile
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
 from pathlib import Path
 
 import pandas as pd
 
+from app.config import settings
 from app.utils.json_compat import sanitize_for_json
 
 # Tried in order. utf-8-sig reads plain UTF-8 too and strips a BOM that would
@@ -73,7 +75,29 @@ def _decode(file_bytes: bytes) -> str:
     raise DatasetError("The file's text encoding couldn't be read.")  # unreachable: latin-1 decodes anything
 
 
+def _check_unzipped_size(file_bytes: bytes) -> None:
+    """Refuse an .xlsx that would expand past the limit once unzipped.
+
+    An .xlsx is a zip archive, and zip compresses repetitive XML extremely
+    well, so a file under the upload cap can expand to gigabytes when opened.
+    The sizes are read from the archive's directory, without decompressing.
+    A file that under-declares its size gains nothing: Python's zipfile, which
+    openpyxl reads through, stops at the declared size.
+    """
+    if not zipfile.is_zipfile(BytesIO(file_bytes)):
+        return  # legacy .xls, or not an archive at all; the parser decides
+    with zipfile.ZipFile(BytesIO(file_bytes)) as archive:
+        unzipped = sum(info.file_size for info in archive.infolist())
+    limit = settings.max_excel_unzipped_mb * 1024 * 1024
+    if unzipped > limit:
+        raise DatasetError(
+            f"This workbook expands to {unzipped / 1024 / 1024:,.0f} MB when opened, over the "
+            f"{settings.max_excel_unzipped_mb} MB limit. Save the sheet you need as CSV and upload that."
+        )
+
+
 def _read_excel(file_bytes: bytes, sheet: str | None) -> LoadedTable:
+    _check_unzipped_size(file_bytes)
     try:
         workbook = pd.ExcelFile(BytesIO(file_bytes))
     except Exception as exc:
