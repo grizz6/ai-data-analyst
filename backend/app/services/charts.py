@@ -4,16 +4,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from app.models.schemas import ChartSpec
+from app.services.semantics import is_categorical
 from app.utils.json_compat import plotly_figure_to_dict
 
 CHART_ROW_LIMIT = 50_000
 TIME_BUCKET_LIMIT = 366
 MARKER_POINT_LIMIT = 60
 BOX_PLOT_COLUMNS = 4
-# A text column is worth a bar chart only if its values repeat. Past this many distinct
-# values, and when most rows are unique, it's a name or free text, not a category.
-CATEGORY_MAX_UNIQUE = 50
-CATEGORY_MAX_UNIQUE_SHARE = 0.5
 MIN_PAIRED_ROWS = 3
 
 # Smallest bucket that keeps the line under TIME_BUCKET_LIMIT points.
@@ -39,14 +36,6 @@ def _time_bucket(dates: pd.Series) -> tuple[str, str]:
             return freq, label
     freq, _, label = _TIME_BUCKETS[-1]
     return freq, label
-
-
-def _is_chartable_category(series: pd.Series) -> bool:
-    values = series.dropna()
-    unique = values.nunique()
-    if unique < 2:
-        return False
-    return unique <= CATEGORY_MAX_UNIQUE or unique / len(values) <= CATEGORY_MAX_UNIQUE_SHARE
 
 
 def _strongest_pair(df: pd.DataFrame, numeric_cols: list) -> tuple[str, str]:
@@ -82,7 +71,7 @@ def build_charts(df: pd.DataFrame, max_charts: int = 8) -> list[ChartSpec]:
         for c in df.columns
         if c not in numeric_cols
         and not pd.api.types.is_datetime64_any_dtype(df[c])
-        and _is_chartable_category(df[c])
+        and is_categorical(df[c])
     ]
     date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
 

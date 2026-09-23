@@ -162,6 +162,16 @@ def _recommendations(result: AnalysisResult) -> list[str]:
                 f"'{action.column}' was dropped for being mostly empty. "
                 "Check whether the source system is supposed to fill it."
             )
+        elif action.action == "convert_numeric_text":
+            recs.append(
+                f"'{action.column}' arrived as text and was converted to numbers. "
+                "Fix the export so it arrives as numbers, and check any values that became missing."
+            )
+        elif action.action == "unify_labels":
+            recs.append(
+                f"'{action.column}' had labels differing only in case or spacing. "
+                "Standardize them where the data is entered so counts don't split."
+            )
         elif action.action in ("impute_median", "impute_mode"):
             recs.append(
                 f"'{action.column}' had {action.rows_affected} missing value(s) filled during "

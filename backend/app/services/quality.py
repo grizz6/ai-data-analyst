@@ -3,6 +3,7 @@ from collections.abc import Collection
 import pandas as pd
 
 from app.models.schemas import QualityIssue
+from app.services import semantics
 
 
 def check_quality(df: pd.DataFrame, identifiers: Collection[str] = ()) -> list[QualityIssue]:
@@ -85,4 +86,46 @@ def check_quality(df: pd.DataFrame, identifiers: Collection[str] = ()) -> list[Q
                 )
             )
 
+    for col in df.columns:
+        if col in identifiers:
+            continue
+        issue = _numbers_as_text(df, col) or _inconsistent_labels(df, col)
+        if issue:
+            issues.append(issue)
+
     return issues
+
+
+def _numbers_as_text(df: pd.DataFrame, col) -> QualityIssue | None:
+    if semantics.parse_numeric_text(df[col]) is None:
+        return None
+    example = str(df[col].dropna().iloc[0]).strip()
+    return QualityIssue(
+        severity="warning",
+        category="type",
+        column=str(col),
+        message=(
+            f"Column '{col}' stores numbers as text (e.g. '{example}'), "
+            "so it can't be summarized until converted."
+        ),
+        details={"example": example},
+    )
+
+
+def _inconsistent_labels(df: pd.DataFrame, col) -> QualityIssue | None:
+    if not pd.api.types.is_object_dtype(df[col]) or not semantics.is_categorical(df[col]):
+        return None
+    variants = semantics.label_variants(df[col])
+    if not variants:
+        return None
+    examples = "; ".join(" / ".join(repr(s) for s in spellings) for spellings in list(variants.values())[:2])
+    return QualityIssue(
+        severity="warning",
+        category="labels",
+        column=str(col),
+        message=(
+            f"Column '{col}' writes {len(variants)} label(s) more than one way ({examples}), "
+            "which splits one category into several."
+        ),
+        details={"labels_affected": len(variants)},
+    )

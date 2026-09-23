@@ -46,3 +46,85 @@ def identifier_columns(df: pd.DataFrame) -> list[str]:
         for col in df.columns
         if looks_like_identifier_name(col) or is_row_counter(df[col])
     ]
+
+
+# ---------------------------------------------------------------------------
+# Categories: text whose values repeat.
+# ---------------------------------------------------------------------------
+
+# Past this many distinct values, and with most rows unique, a text column is a
+# name or free text rather than a category.
+CATEGORY_MAX_UNIQUE = 50
+CATEGORY_MAX_UNIQUE_SHARE = 0.5
+
+
+def is_categorical(series: pd.Series) -> bool:
+    values = series.dropna()
+    unique = values.nunique()
+    if unique < 2:
+        return False
+    return unique <= CATEGORY_MAX_UNIQUE or unique / len(values) <= CATEGORY_MAX_UNIQUE_SHARE
+
+
+def label_key(value: str) -> str:
+    """How a person reads a label: case, surrounding spaces, and doubled spaces don't matter."""
+    return " ".join(str(value).split()).casefold()
+
+
+def label_variants(series: pd.Series) -> dict[str, list[str]]:
+    """Labels written more than one way, keyed by the most common spelling.
+
+    Only exact case and whitespace differences count. "NY" and "New York" are
+    left alone, because deciding those are the same needs knowledge this code
+    doesn't have.
+    """
+    counts = series.dropna().astype(str).value_counts()
+    groups: dict[str, list[str]] = {}
+    for spelling in counts.index:  # most common first
+        groups.setdefault(label_key(spelling), []).append(spelling)
+    return {spellings[0]: spellings for spellings in groups.values() if len(spellings) > 1}
+
+
+# ---------------------------------------------------------------------------
+# Numbers stored as text: "$1,200", "45%", "(300)", " 12.5 ".
+# ---------------------------------------------------------------------------
+
+_NUMERIC_TEXT = re.compile(r"^[-+]?\(?[-+]?[$€£¥]?\s*\d[\d,]*(\.\d+)?\s*%?\)?$")
+_LEADING_ZERO = re.compile(r"^0\d")
+# Share of the non-empty values that must look numeric before converting. The rest
+# ("N/A", "-", "unknown") become missing, which is what they mean.
+NUMERIC_TEXT_THRESHOLD = 0.9
+
+
+def parse_numeric_text(series: pd.Series) -> pd.Series | None:
+    """The column as numbers if it is numbers stored as text, otherwise None.
+
+    Currency symbols, thousands separators and % are stripped (45% becomes 45),
+    and accounting-style (300) becomes -300. Text with leading zeros such as
+    "00123" is left alone: that's a code, and converting would destroy it.
+    """
+    if not (pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)):
+        return None
+    text = series.dropna().astype(str).str.strip()
+    text = text[text != ""]
+    if text.empty or text.str.match(_LEADING_ZERO).any():
+        return None
+    looks_numeric = text.str.match(_NUMERIC_TEXT)
+    if looks_numeric.mean() < NUMERIC_TEXT_THRESHOLD:
+        return None
+
+    def to_number(value) -> float | None:
+        if pd.isna(value):
+            return None
+        raw = str(value).strip()
+        if not _NUMERIC_TEXT.match(raw):
+            return None
+        negative = raw.startswith("(") and raw.endswith(")")
+        digits = re.sub(r"[()$€£¥,%\s]", "", raw)
+        try:
+            number = float(digits)
+        except ValueError:
+            return None
+        return -number if negative else number
+
+    return series.map(to_number).astype("float64")

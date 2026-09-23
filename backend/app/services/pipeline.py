@@ -37,7 +37,7 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
 
     # prepared_df has duplicates and empty columns removed and dates parsed, but no
     # filled-in values: every statistic below comes from recorded data only.
-    prepared_df, prepare_actions = cleaning.prepare_dataframe(raw_df)
+    prepared_df, prepare_actions = cleaning.prepare_dataframe(raw_df, identifiers=identifiers)
     cleaned_df, fill_actions = cleaning.fill_missing(prepared_df, identifiers=identifiers)
     cleaning_actions = prepare_actions + fill_actions
 

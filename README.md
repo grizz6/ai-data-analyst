@@ -47,8 +47,8 @@ JSON result  +  Plotly chart specs  +  HTML report download
 |------|--------|----------------|
 | 1 | `ingestion.py` | Reads CSV (detects UTF-8, Windows-1252, or Latin-1 text and comma, semicolon, tab, or pipe delimiters) or Excel (first sheet with data, or a named sheet) into a DataFrame and strips whitespace from column names |
 | 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
-| 2 | `quality.py` | Flags duplicates, missing values, constant columns, and IQR outliers, each with a severity |
-| 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
+| 2 | `quality.py` | Flags duplicates, missing values, constant columns, IQR outliers, numbers stored as text, and labels written more than one way, each with a severity |
+| 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns, converts numbers stored as text (`$1,200`, `45%`, `(300)`), merges labels that differ only in case or spacing (`West` / `west `), and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
 | 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
 | 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
