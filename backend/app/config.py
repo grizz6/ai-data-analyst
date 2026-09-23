@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     max_excel_unzipped_mb: int = 100
     missing_threshold_drop: float = 0.9
+    # Built React app to serve at "/", if present (see app/frontend.py).
+    frontend_dist: str = str(BACKEND_DIR.parent / "frontend" / "dist")
     # SQLite file holding stored analyses; ":memory:" keeps them in memory only.
     database_path: str = str(BACKEND_DIR / "data" / "ada.sqlite3")
     session_ttl_minutes: int = 60

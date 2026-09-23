@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.frontend import mount_frontend
 from app.routers import analysis
 
 # Multipart wraps the file in boundaries and part headers; allow for that on top of the cap.
@@ -37,7 +40,10 @@ app.add_middleware(
 
 app.include_router(analysis.router)
 
+# With a built frontend present, this one process serves the whole app. Without
+# it (development, or an API-only deploy), "/" just points at the API docs.
+if not mount_frontend(app, Path(settings.frontend_dist)):
 
-@app.get("/")
-async def root():
-    return {"message": settings.app_name, "docs": "/docs"}
+    @app.get("/")
+    async def root():
+        return {"message": settings.app_name, "docs": "/docs"}

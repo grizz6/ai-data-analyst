@@ -78,6 +78,15 @@ In a second terminal:
 
 Open **http://localhost:5173** and drop in `sample-data/sales_sample.csv` (31 rows of weekly sales by region and product).
 
+**As one process.** Build the frontend once and the backend serves it too, so everything runs on port 8000 with no second server:
+
+```bash
+cd frontend && npm run build && cd ..
+./scripts/run-backend.sh
+```
+
+Then open **http://127.0.0.1:8000**. `/api/*` is the API, `/docs` the API docs, and every other path is the app.
+
 ### Tests
 
 ```bash
@@ -114,6 +123,7 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
 | `ADA_MAX_EXCEL_UNZIPPED_MB` | `100` | An `.xlsx` is a zip archive; one that would expand past this once opened is refused before parsing, so a small upload can't unpack into gigabytes |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
+| `ADA_FRONTEND_DIST` | `frontend/dist` | Built frontend to serve at `/`; if it isn't there, `/` just points at `/docs` |
 | `ADA_DATABASE_PATH` | `backend/data/ada.sqlite3` | SQLite file for stored analyses (created on first run; `:memory:` keeps them in memory only) |
 | `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
