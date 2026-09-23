@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class ColumnProfile(BaseModel):
@@ -126,6 +126,14 @@ class AnalysisResult(BaseModel):
     llama: LlamaExplanation
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
+
+    # The full cleaned dataset as CSV, kept with the session for download but
+    # left out of the JSON response, which only carries a preview.
+    _cleaned_csv: bytes | None = PrivateAttr(default=None)
+
+    @property
+    def cleaned_csv(self) -> bytes | None:
+        return self._cleaned_csv
 
 
 class QuestionRequest(BaseModel):

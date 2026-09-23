@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { askQuestion, reportDownloadUrl } from "../api";
+import { askQuestion, cleanedCsvUrl, reportDownloadUrl } from "../api";
 import type { AnalysisResult } from "../types";
 import ChartGrid from "./ChartGrid";
 import DataTable from "./DataTable";
@@ -93,13 +93,12 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       </div>
 
-      <div style={{ margin: "1rem 0" }}>
-        <a
-          className="btn"
-          href={reportDownloadUrl(result.session_id)}
-          download
-        >
+      <div className="actions">
+        <a className="btn" href={reportDownloadUrl(result.session_id)} download>
           Download HTML report
+        </a>
+        <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
+          Download cleaned data (CSV)
         </a>
       </div>
 

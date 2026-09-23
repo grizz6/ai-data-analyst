@@ -32,3 +32,7 @@ export async function askQuestion(
 export function reportDownloadUrl(sessionId: string): string {
   return `/api/sessions/${sessionId}/report`;
 }
+
+export function cleanedCsvUrl(sessionId: string): string {
+  return `/api/sessions/${sessionId}/cleaned.csv`;
+}

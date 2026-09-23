@@ -81,7 +81,7 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
         configured=False,
     )
 
-    return AnalysisResult(
+    result = AnalysisResult(
         session_id=str(uuid.uuid4()),
         filename=filename,
         sheet_name=table.sheet,
@@ -101,3 +101,6 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),
     )
+    # utf-8-sig adds the byte-order mark Excel needs to show accented text correctly.
+    result._cleaned_csv = cleaned_df.to_csv(index=False).encode("utf-8-sig")
+    return result

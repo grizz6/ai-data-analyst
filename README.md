@@ -118,6 +118,7 @@ Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_b
 | `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
 | `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set |
 | `GET` | `/api/sessions/{id}/report` | Download the HTML report |
+| `GET` | `/api/sessions/{id}/cleaned.csv` | Download the full cleaned dataset as CSV (UTF-8 with a byte-order mark so Excel reads accents correctly). Gaps are filled here, as in the cleaned preview |
 | `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
 
 Problems with the file itself (empty, unreadable, bad sheet name) return 400 with a plain explanation. Unexpected server errors return 500 with a short reference code; the details go to the server log only.

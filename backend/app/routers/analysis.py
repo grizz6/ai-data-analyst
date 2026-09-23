@@ -1,8 +1,10 @@
 import logging
+import re
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
@@ -115,6 +117,24 @@ async def download_report(session_id: str):
             "Content-Disposition": f'attachment; filename="report-{session_id[:8]}.html"'
         },
     )
+
+
+@router.get("/sessions/{session_id}/cleaned.csv")
+async def download_cleaned_data(session_id: str):
+    result = session_or_404(session_id)
+    if result.cleaned_csv is None:
+        raise HTTPException(status_code=404, detail="No cleaned data is stored for this analysis.")
+    return Response(
+        content=result.cleaned_csv,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{cleaned_filename(result.filename)}"'},
+    )
+
+
+def cleaned_filename(original: str) -> str:
+    """'Q3 sales (final).xlsx' -> 'Q3-sales-final-cleaned.csv', safe inside a header."""
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(original).stem).strip("-.") or "data"
+    return f"{stem}-cleaned.csv"
 
 
 @router.get("/health")
