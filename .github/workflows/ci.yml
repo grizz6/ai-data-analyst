@@ -94,3 +94,44 @@ jobs:
             echo "::error::frontend/src/generated/api-schema.ts is out of date. Run scripts/gen-api-types.sh and commit the result."
             exit 1
           }
+
+  docker:
+    name: Docker image builds and serves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t ai-data-analyst .
+
+      - name: Start a container
+        run: docker run -d --name ada -p 8000:8000 ai-data-analyst
+
+      - name: Smoke-test the running container
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/health && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8000/api/health | grep -q '"status":"ok"'
+          curl -sf http://127.0.0.1:8000/ | grep -q '<div id="root">'
+          SESSION=$(curl -sf -F "file=@sample-data/sales_sample.csv" http://127.0.0.1:8000/api/upload \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['session_id'])")
+          curl -sf "http://127.0.0.1:8000/api/sessions/$SESSION/cleaned.csv" | head -1 | grep -q "date,region,product,sales,units"
+          echo "health, app, upload and download all work in the container"
+
+      - name: Session survives a container restart
+        run: |
+          SESSION=$(curl -sf -F "file=@sample-data/sales_sample.csv" http://127.0.0.1:8000/api/upload \
+            | python3 -c "import json, sys; print(json.load(sys.stdin)['session_id'])")
+          docker restart ada
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8000/api/health > /dev/null && break
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:8000/api/sessions/$SESSION" > /dev/null
+          echo "session $SESSION still there after restart"
+
+      - name: Container logs
+        if: always()
+        run: docker logs ada

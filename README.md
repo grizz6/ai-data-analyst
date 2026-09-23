@@ -18,7 +18,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
 | Tests and CI | 171 backend tests (pytest) and 24 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
-| Deployment | **Not yet.** Runs locally |
+| Deployment | **Not yet deployed.** Runs locally, or as one Docker container (built and smoke-tested in CI) |
 
 ---
 
@@ -86,6 +86,17 @@ cd frontend && npm run build && cd ..
 ```
 
 Then open **http://127.0.0.1:8000**. `/api/*` is the API, `/docs` the API docs, and every other path is the app.
+
+### Docker
+
+The `Dockerfile` builds the frontend and a Python image that serves it together with the API on port 8000, running as an unprivileged user:
+
+```bash
+docker build -t ai-data-analyst .
+docker run -p 8000:8000 -v ada-data:/app/backend/data ai-data-analyst
+```
+
+The volume keeps stored analyses across container restarts. CI builds the image on every push, starts it, uploads the sample file, downloads the cleaned CSV, restarts the container, and checks the session is still there.
 
 ### Tests
 
