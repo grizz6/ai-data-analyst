@@ -87,7 +87,10 @@ def generate_rule_insights(
             RuleInsight(
                 category="categorical",
                 title=f"Top category in {cat.column}",
-                message=f"'{top['value']}' is most frequent ({top['count']:,} rows, ~{share:.0f}% of shown top values).",
+                message=(
+                    f"'{top['value']}' is most frequent "
+                    f"({top['count']:,} rows, ~{share:.0f}% of shown top values)."
+                ),
             )
         )
 

@@ -10,7 +10,10 @@ from app.services.semantics import identifier_columns, is_row_counter, looks_lik
 
 @pytest.mark.parametrize(
     "name",
-    ["id", "ID", "customer_id", "customerId", "userID", "Order ID", "id_number", "uuid", "product_sku", "zip", "api_key"],
+    [
+        "id", "ID", "customer_id", "customerId", "userID", "Order ID",
+        "id_number", "uuid", "product_sku", "zip", "api_key",
+    ],
 )
 def test_identifier_names(name):
     assert looks_like_identifier_name(name)
@@ -69,7 +72,8 @@ def test_identifiers_stay_out_of_statistics_and_charts(orders_result):
     ids = {"order_id", "row"}
 
     assert ids.isdisjoint(s.column for s in orders_result.numeric_summaries)
-    assert ids.isdisjoint({p.column_a for p in orders_result.correlations} | {p.column_b for p in orders_result.correlations})
+    correlated = {p.column_a for p in orders_result.correlations} | {p.column_b for p in orders_result.correlations}
+    assert ids.isdisjoint(correlated)
     assert ids.isdisjoint(q.column for q in orders_result.quality_issues if q.category == "outliers")
     assert not any("order_id" in c.title or "row" in c.title.split() for c in orders_result.charts)
 

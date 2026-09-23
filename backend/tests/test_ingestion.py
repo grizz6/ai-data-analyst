@@ -31,7 +31,7 @@ def test_quoted_commas_do_not_confuse_delimiter_detection():
 @pytest.mark.parametrize(
     ("encoded", "label"),
     [
-        ("﻿café,price\nlatte,4\n".encode("utf-8"), "utf-8 with BOM"),
+        ("﻿café,price\nlatte,4\n".encode(), "utf-8 with BOM"),
         ("café,price\nlatte,4\n".encode("cp1252"), "Windows-1252 (Excel on Windows)"),
         ("café,price\ncrème brûlée,4\n".encode("latin-1"), "Latin-1"),
     ],

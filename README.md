@@ -93,6 +93,8 @@ cd frontend
 npm test
 ```
 
+CI also runs `ruff check .` and `mypy` in `backend/` (settings in `backend/pyproject.toml`) and `npm run lint` (ESLint, TypeScript and React Hooks rules, zero warnings allowed) in `frontend/`.
+
 ### API types
 
 The frontend's TypeScript types are generated from the backend's Pydantic models, not written by hand. After changing anything in `backend/app/models/schemas.py`, run:

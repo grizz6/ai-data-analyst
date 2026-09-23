@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle errors, pyflakes, import order, bugbear, pyupgrade.
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["app"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+
+# No type information published for these.
+[[tool.mypy.overrides]]
+module = ["plotly.*", "scipy.*", "xlrd.*"]
+ignore_missing_imports = true

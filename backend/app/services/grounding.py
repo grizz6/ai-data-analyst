@@ -30,8 +30,7 @@ def numbers_in(text: str) -> list[str]:
 def ungrounded_numbers(text: str, facts: dict | list | str) -> list[str]:
     """Numbers in `text` that don't match any number in `facts`, in order of appearance."""
     fact_text = facts if isinstance(facts, str) else json.dumps(facts, default=str)
-    fact_values = {_to_decimal(n) for n in numbers_in(fact_text)}
-    fact_values.discard(None)
+    fact_values = {value for n in numbers_in(fact_text) if (value := _to_decimal(n)) is not None}
 
     return [raw for raw in numbers_in(text) if not _matches_any(raw, fact_values)]
 

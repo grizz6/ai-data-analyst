@@ -2,6 +2,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, Response
@@ -56,8 +57,8 @@ async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
 
 @router.post("/upload", response_model=AnalysisResult)
 async def upload_dataset(
-    file: UploadFile = File(...),
-    sheet: str | None = Query(default=None, description="Excel only: which sheet to analyze."),
+    file: Annotated[UploadFile, File()],
+    sheet: Annotated[str | None, Query(description="Excel only: which sheet to analyze.")] = None,
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required.")

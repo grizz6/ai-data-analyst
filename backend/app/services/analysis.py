@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 import pandas as pd
@@ -96,10 +97,12 @@ def top_correlations(df: pd.DataFrame, min_abs: float = 0.5, limit: int = 10) ->
     pairs: list[CorrelationPair] = []
 
     cols = list(corr.columns)
+    matrix = corr.to_numpy(dtype=float)
     for i, a in enumerate(cols):
-        for b in cols[i + 1 :]:
-            value = corr.loc[a, b]
-            if pd.isna(value) or abs(value) < min_abs:
+        for j in range(i + 1, len(cols)):
+            b = cols[j]
+            value = float(matrix[i, j])  # NaN when a column is constant
+            if math.isnan(value) or abs(value) < min_abs:
                 continue
             both = numeric[[a, b]].dropna()
             if len(both) < 3:
@@ -187,15 +190,15 @@ def detect_trends(df: pd.DataFrame) -> list[TrendInsight]:
 
     window = 5
     for col in numeric_cols[:5]:
-        series = df[col].dropna().reset_index(drop=True)
-        if len(series) < 2 * window:
+        values = df[col].dropna().reset_index(drop=True)
+        if len(values) < 2 * window:
             continue
-        start = series.iloc[:window].mean()
-        end = series.iloc[-window:].mean()
+        start = values.iloc[:window].mean()
+        end = values.iloc[-window:].mean()
         if start == 0:
             continue
         change_pct = float(((end - start) / abs(start)) * 100)
-        fit = _fit_line(pd.Series(range(len(series)), dtype=float), series)
+        fit = _fit_line(pd.Series(range(len(values)), dtype=float), values)
         if abs(change_pct) <= ROW_TREND_MIN_CHANGE_PCT or fit is None or fit.p_value >= SIGNIFICANCE_LEVEL:
             continue
         direction = "up" if change_pct > 0 else "down"

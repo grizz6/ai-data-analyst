@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -31,5 +31,5 @@ def render_html_report(result: AnalysisResult) -> str:
     return template.render(
         result=result,
         chart_notes={e["chart_id"]: e["explanation"] for e in result.llama.chart_explanations},
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
     )

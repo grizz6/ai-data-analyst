@@ -107,9 +107,9 @@ def parse_numeric_text(series: pd.Series) -> pd.Series | None:
         return None
     text = series.dropna().astype(str).str.strip()
     text = text[text != ""]
-    if text.empty or text.str.match(_LEADING_ZERO).any():
+    if text.empty or text.str.match(_LEADING_ZERO.pattern).any():
         return None
-    looks_numeric = text.str.match(_NUMERIC_TEXT)
+    looks_numeric = text.str.match(_NUMERIC_TEXT.pattern)
     if looks_numeric.mean() < NUMERIC_TEXT_THRESHOLD:
         return None
 
