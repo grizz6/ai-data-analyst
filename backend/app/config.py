@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     max_upload_mb: int = 10
     max_excel_unzipped_mb: int = 100
     missing_threshold_drop: float = 0.9
+    # SQLite file holding stored analyses; ":memory:" keeps them in memory only.
+    database_path: str = str(BACKEND_DIR / "data" / "ada.sqlite3")
     session_ttl_minutes: int = 60
     max_sessions: int = 20
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

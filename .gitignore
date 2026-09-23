@@ -11,6 +11,7 @@ htmlcov/
 # Secrets and local data
 .env
 backend/uploads/
+backend/data/
 
 # Frontend
 node_modules/

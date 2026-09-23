@@ -1,4 +1,9 @@
+import os
 from pathlib import Path
+
+# Tests must never write to the real database file. This has to be set before
+# app.config is imported, because the store opens its file at import time.
+os.environ["ADA_DATABASE_PATH"] = ":memory:"
 
 import pytest
 from fastapi.testclient import TestClient

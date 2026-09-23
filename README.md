@@ -17,7 +17,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
 | Tests and CI | 171 backend tests (pytest) and 24 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
-| Persistence | **Not yet.** Results live in memory (`session_store.py`), expire after 60 minutes without use, are capped at 20 sessions, and disappear on restart |
+| Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
 | Deployment | **Not yet.** Runs locally |
 
 ---
@@ -34,7 +34,7 @@ Browser: React + Vite (frontend/)
 │   → analysis → charts → rule-based insights       worker thread (Pandas)  │
 │   → explanation: LLM + grounding check,                                   │
 │     or rule-based fallback                        event loop (network)    │
-│   → in-memory session store                                               │
+│   → SQLite session store (survives restarts)                              │
 └───────────────────────────────────────────────────────────────────────────┘
         │
         ▼
@@ -114,6 +114,7 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
 | `ADA_MAX_EXCEL_UNZIPPED_MB` | `100` | An `.xlsx` is a zip archive; one that would expand past this once opened is refused before parsing, so a small upload can't unpack into gigabytes |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
+| `ADA_DATABASE_PATH` | `backend/data/ada.sqlite3` | SQLite file for stored analyses (created on first run; `:memory:` keeps them in memory only) |
 | `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
@@ -168,7 +169,7 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 
 ## Known limits
 
-- Results are kept in memory, so a restart loses them.
+- Results are stored in a local SQLite file, which suits one server; several servers behind a load balancer would need a shared database such as Postgres.
 - Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
