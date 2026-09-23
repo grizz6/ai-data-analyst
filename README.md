@@ -86,6 +86,13 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
+Frontend (Vitest and React Testing Library, in a simulated browser):
+
+```bash
+cd frontend
+npm test
+```
+
 ### API types
 
 The frontend's TypeScript types are generated from the backend's Pydantic models, not written by hand. After changing anything in `backend/app/models/schemas.py`, run:

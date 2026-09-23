@@ -1,15 +1,11 @@
 import { lazy, Suspense, useState } from "react";
 import { askQuestion, cleanedCsvUrl, reportDownloadUrl } from "../api";
+import { formatP } from "../format";
 import type { AnalysisResult } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
 import DataTable from "./DataTable";
-
-function formatP(p: number | null): string {
-  if (p === null) return "p n/a";
-  return p < 0.001 ? "p < 0.001" : `p = ${p.toFixed(3)}`;
-}
 
 interface Props {
   result: AnalysisResult;

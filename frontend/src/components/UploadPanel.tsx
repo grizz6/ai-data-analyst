@@ -51,6 +51,7 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
       <input
         ref={inputRef}
         type="file"
+        aria-label="CSV or Excel file"
         accept=".csv,.xlsx,.xls"
         onChange={(e) => handleFile(e.target.files?.[0])}
       />

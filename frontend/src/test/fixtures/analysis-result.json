@@ -1,0 +1,332 @@
+{
+  "session_id": "11111111-2222-3333-4444-555555555555",
+  "filename": "sales_sample.csv",
+  "sheet_name": null,
+  "available_sheets": [],
+  "row_count": 31,
+  "column_count": 5,
+  "columns": [
+    {
+      "name": "date",
+      "dtype": "datetime64[ns]",
+      "non_null_count": 31,
+      "null_count": 0,
+      "null_pct": 0.0,
+      "unique_count": 31,
+      "sample_values": [
+        "2024-01-05",
+        "2024-01-12",
+        "2024-01-18",
+        "2024-02-03",
+        "2024-02-14"
+      ],
+      "is_identifier": false
+    },
+    {
+      "name": "region",
+      "dtype": "object",
+      "non_null_count": 31,
+      "null_count": 0,
+      "null_pct": 0.0,
+      "unique_count": 4,
+      "sample_values": [
+        "West",
+        "East",
+        "West",
+        "North",
+        "West"
+      ],
+      "is_identifier": false
+    },
+    {
+      "name": "product",
+      "dtype": "object",
+      "non_null_count": 31,
+      "null_count": 0,
+      "null_pct": 0.0,
+      "unique_count": 3,
+      "sample_values": [
+        "Product A",
+        "Product B",
+        "Product A",
+        "Product C",
+        "Product B"
+      ],
+      "is_identifier": false
+    },
+    {
+      "name": "sales",
+      "dtype": "int64",
+      "non_null_count": 31,
+      "null_count": 0,
+      "null_pct": 0.0,
+      "unique_count": 31,
+      "sample_values": [
+        "12500",
+        "8200",
+        "14200",
+        "5600",
+        "9800"
+      ],
+      "is_identifier": false
+    },
+    {
+      "name": "units",
+      "dtype": "int64",
+      "non_null_count": 31,
+      "null_count": 0,
+      "null_pct": 0.0,
+      "unique_count": 28,
+      "sample_values": [
+        "120",
+        "95",
+        "135",
+        "70",
+        "110"
+      ],
+      "is_identifier": false
+    }
+  ],
+  "quality_issues": [],
+  "cleaning_actions": [
+    {
+      "action": "parse_datetime",
+      "column": "date",
+      "description": "Parsed column 'date' as datetime.",
+      "rows_affected": null
+    }
+  ],
+  "numeric_summaries": [
+    {
+      "column": "sales",
+      "count": 31,
+      "mean": 9419.3548,
+      "std": 3457.5925,
+      "min": 4300.0,
+      "q25": 7000.0,
+      "median": 9200.0,
+      "q75": 11500.0,
+      "max": 16200.0
+    },
+    {
+      "column": "units",
+      "count": 31,
+      "mean": 96.7097,
+      "std": 28.2821,
+      "min": 52.0,
+      "q25": 82.0,
+      "median": 92.0,
+      "q75": 116.0,
+      "max": 155.0
+    }
+  ],
+  "categorical_summaries": [
+    {
+      "column": "region",
+      "top_values": [
+        {
+          "value": "West",
+          "count": 11
+        },
+        {
+          "value": "East",
+          "count": 10
+        },
+        {
+          "value": "North",
+          "count": 5
+        },
+        {
+          "value": "South",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "column": "product",
+      "top_values": [
+        {
+          "value": "Product A",
+          "count": 16
+        },
+        {
+          "value": "Product B",
+          "count": 8
+        },
+        {
+          "value": "Product C",
+          "count": 7
+        }
+      ]
+    }
+  ],
+  "correlations": [
+    {
+      "column_a": "sales",
+      "column_b": "units",
+      "correlation": 0.9832,
+      "n": 31,
+      "p_value": 5.632283615726535e-23
+    }
+  ],
+  "trends": [
+    {
+      "column": "sales",
+      "direction": "stable",
+      "change_pct": -0.56,
+      "message": "'sales' was stable over 'date' (-0.6% between halves, fitted slope -94.18 per month, p = 0.595).",
+      "slope": -94.180791,
+      "slope_unit": "month",
+      "p_value": 0.5953817990877613
+    },
+    {
+      "column": "units",
+      "direction": "stable",
+      "change_pct": -2.94,
+      "message": "'units' was stable over 'date' (-2.9% between halves, fitted slope -1.243 per month, p = 0.390).",
+      "slope": -1.243151,
+      "slope_unit": "month",
+      "p_value": 0.3895618033549796
+    }
+  ],
+  "rule_insights": [
+    {
+      "category": "overview",
+      "title": "Dataset size",
+      "message": "The dataset has 31 rows and 5 columns after cleaning.",
+      "severity": "info"
+    },
+    {
+      "category": "numeric",
+      "title": "Summary for sales",
+      "message": "Mean 9,419.35, median 9,200.00, range 4,300.00 \u2013 16,200.00 (spread 11,900.00).",
+      "severity": "info"
+    },
+    {
+      "category": "numeric",
+      "title": "Summary for units",
+      "message": "Mean 96.71, median 92.00, range 52.00 \u2013 155.00 (spread 103.00).",
+      "severity": "info"
+    },
+    {
+      "category": "categorical",
+      "title": "Top category in region",
+      "message": "'West' is most frequent (11 rows, ~35% of shown top values).",
+      "severity": "info"
+    },
+    {
+      "category": "categorical",
+      "title": "Top category in product",
+      "message": "'Product A' is most frequent (16 rows, ~52% of shown top values).",
+      "severity": "info"
+    },
+    {
+      "category": "correlation",
+      "title": "Correlated columns",
+      "message": "Strong positive correlation (0.9832, n = 31, p < 0.001) between 'sales' and 'units'.",
+      "severity": "info"
+    },
+    {
+      "category": "trend",
+      "title": "Trend in sales",
+      "message": "'sales' was stable over 'date' (-0.6% between halves, fitted slope -94.18 per month, p = 0.595).",
+      "severity": "info"
+    },
+    {
+      "category": "trend",
+      "title": "Trend in units",
+      "message": "'units' was stable over 'date' (-2.9% between halves, fitted slope -1.243 per month, p = 0.390).",
+      "severity": "info"
+    },
+    {
+      "category": "extrema",
+      "title": "Highest sales",
+      "message": "Maximum sales is 16200 (row 15 of the file).",
+      "severity": "info"
+    },
+    {
+      "category": "extrema",
+      "title": "Highest units",
+      "message": "Maximum units is 155 (row 15 of the file).",
+      "severity": "info"
+    }
+  ],
+  "charts": [
+    {
+      "id": "hist_sales",
+      "title": "Distribution of sales",
+      "chart_type": "histogram",
+      "plotly_json": {
+        "data": [],
+        "layout": {}
+      }
+    },
+    {
+      "id": "hist_units",
+      "title": "Distribution of units",
+      "chart_type": "histogram",
+      "plotly_json": {
+        "data": [],
+        "layout": {}
+      }
+    }
+  ],
+  "llama": {
+    "dataset_overview": "'sales_sample.csv' has 31 rows and 5 columns after cleaning. 0 data quality issues were flagged before cleaning. Every figure in this analysis was computed with Pandas.",
+    "chart_explanations": [],
+    "analysis_summary": "'West' is most frequent (11 rows, ~35% of shown top values). 'Product A' is most frequent (16 rows, ~52% of shown top values). Strong positive correlation (0.9832, n = 31, p < 0.001) between 'sales' and 'units'. 'sales' was stable over 'date' (-0.6% between halves, fitted slope -94.18 per month, p = 0.595).",
+    "recommendations": [
+      "No data quality problems were found, so the figures can be read as they are."
+    ],
+    "configured": false,
+    "source": "rule_based",
+    "model": null,
+    "fallback_reason": null
+  },
+  "preview_rows": [
+    {
+      "date": "2024-01-05",
+      "region": "West",
+      "product": "Product A",
+      "sales": 12500,
+      "units": 120
+    },
+    {
+      "date": "2024-01-12",
+      "region": "East",
+      "product": "Product B",
+      "sales": 8200,
+      "units": 95
+    },
+    {
+      "date": "2024-01-18",
+      "region": "West",
+      "product": "Product A",
+      "sales": 14200,
+      "units": 135
+    }
+  ],
+  "cleaned_preview_rows": [
+    {
+      "date": "2024-01-05",
+      "region": "West",
+      "product": "Product A",
+      "sales": 12500,
+      "units": 120
+    },
+    {
+      "date": "2024-01-12",
+      "region": "East",
+      "product": "Product B",
+      "sales": 8200,
+      "units": 95
+    },
+    {
+      "date": "2024-01-18",
+      "region": "West",
+      "product": "Product A",
+      "sales": 14200,
+      "units": 135
+    }
+  ]
+}

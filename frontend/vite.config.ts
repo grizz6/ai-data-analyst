@@ -1,8 +1,12 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+  },
   build: {
     // The lazily loaded Plotly chunk is ~1.4 MB on its own; everything else is small.
     chunkSizeWarningLimit: 1500,
