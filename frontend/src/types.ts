@@ -42,6 +42,10 @@ export interface CorrelationPair {
   column_a: string;
   column_b: string;
   correlation: number;
+  /** Rows where both columns have a value. */
+  n: number;
+  /** Two-sided p-value for "no linear relationship". */
+  p_value: number | null;
 }
 
 export interface TrendInsight {
@@ -49,6 +53,9 @@ export interface TrendInsight {
   direction: string;
   change_pct: number | null;
   message: string;
+  slope: number | null;
+  slope_unit: "day" | "month" | "row" | null;
+  p_value: number | null;
 }
 
 export interface RuleInsight {

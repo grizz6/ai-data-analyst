@@ -50,6 +50,8 @@ class CorrelationPair(BaseModel):
     column_a: str
     column_b: str
     correlation: float
+    n: int = 0  # rows where both columns have a value
+    p_value: float | None = None  # two-sided, H0: no linear relationship
 
 
 class TrendInsight(BaseModel):
@@ -57,6 +59,9 @@ class TrendInsight(BaseModel):
     direction: str
     change_pct: float | None
     message: str
+    slope: float | None = None  # fitted least-squares slope, in value units per slope_unit
+    slope_unit: str | None = None  # "day", "month" or "row"
+    p_value: float | None = None  # two-sided, H0: slope is zero
 
 
 class RuleInsight(BaseModel):

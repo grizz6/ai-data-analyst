@@ -4,6 +4,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.models.schemas import AnalysisResult
+from app.services.analysis import format_p
 
 _TEMPLATES = Path(__file__).resolve().parent.parent / "templates"
 _env = Environment(
@@ -22,6 +23,7 @@ def format_number(value) -> str:
 
 
 _env.filters["num"] = format_number
+_env.filters["pval"] = format_p
 
 
 def render_html_report(result: AnalysisResult) -> str:

@@ -10,6 +10,7 @@ from app.models.schemas import (
     RuleInsight,
     TrendInsight,
 )
+from app.services.analysis import SIGNIFICANCE_LEVEL, format_p
 
 
 def generate_rule_insights(
@@ -57,7 +58,7 @@ def generate_rule_insights(
             RuleInsight(
                 category="quality",
                 title="Data quality warnings",
-                message=f"Found {len(warnings)} warning(s) such as high missingness or duplicates.",
+                message=f"Found {len(warnings)} warning(s) before cleaning. The data quality panel lists each one.",
                 severity="warning",
             )
         )
@@ -93,16 +94,14 @@ def generate_rule_insights(
     for pair in correlations[:3]:
         strength = "strong" if abs(pair.correlation) >= 0.7 else "moderate"
         direction = "positive" if pair.correlation > 0 else "negative"
-        insights.append(
-            RuleInsight(
-                category="correlation",
-                title="Correlated columns",
-                message=(
-                    f"{strength.capitalize()} {direction} correlation ({pair.correlation}) "
-                    f"between '{pair.column_a}' and '{pair.column_b}'."
-                ),
-            )
+        evidence = f", n = {pair.n}, {format_p(pair.p_value)}" if pair.n else ""
+        message = (
+            f"{strength.capitalize()} {direction} correlation ({pair.correlation}{evidence}) "
+            f"between '{pair.column_a}' and '{pair.column_b}'."
         )
+        if pair.p_value is not None and pair.p_value >= SIGNIFICANCE_LEVEL:
+            message += f" With only {pair.n} rows this could be chance, so don't rely on it yet."
+        insights.append(RuleInsight(category="correlation", title="Correlated columns", message=message))
 
     for trend in trends[:4]:
         insights.append(

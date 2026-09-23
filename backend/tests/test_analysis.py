@@ -8,6 +8,7 @@ from app.services.analysis import (
     numeric_summaries,
     top_correlations,
 )
+from app.services.insights import generate_rule_insights
 from tests.builders import correlated_pair, weekly_series
 
 
@@ -34,6 +35,56 @@ def test_planted_correlation_is_found_and_weak_pair_is_not():
 
     assert pairs[("x", "y")] == pytest.approx(0.87, abs=1e-4)
     assert ("a", "b") not in pairs
+
+
+def test_correlation_carries_sample_size_and_p_value():
+    x, y = correlated_pair(200, 0.87, seed=1)
+    [pair] = top_correlations(pd.DataFrame({"x": x, "y": y}))
+    assert pair.n == 200
+    assert pair.p_value < 1e-10
+
+
+def test_correlation_only_counts_rows_where_both_columns_have_values():
+    x, y = correlated_pair(50, 0.9, seed=3)
+    df = pd.DataFrame({"x": x, "y": y})
+    df.loc[:9, "y"] = None
+    [pair] = top_correlations(df)
+    assert pair.n == 40
+
+
+def test_small_sample_correlation_is_called_out_as_possible_chance():
+    df = pd.DataFrame({"a": [1.0, 2, 3, 4, 5], "b": [2.0, 1, 4, 3, 5]})
+    [pair] = top_correlations(df)
+    assert pair.correlation >= 0.5 and pair.p_value >= 0.05  # precondition: big r, tiny n
+
+    [message] = [i.message for i in generate_rule_insights(df, [], [], [], [pair], []) if i.category == "correlation"]
+    assert "n = 5" in message
+    assert "could be chance" in message
+
+
+def test_daily_trend_reports_slope_per_day():
+    dates = pd.date_range("2024-01-01", periods=30, freq="D")
+    [trend] = detect_trends(pd.DataFrame({"date": dates, "sales": [100.0 + 2 * i for i in range(30)]}))
+    assert trend.direction == "up"
+    assert (trend.slope, trend.slope_unit) == (pytest.approx(2.0), "day")
+    assert trend.p_value < 0.001
+    assert "p < 0.001" in trend.message
+
+
+def test_long_trend_reports_slope_per_month():
+    dates = pd.date_range("2023-01-01", periods=365, freq="D")
+    [trend] = detect_trends(pd.DataFrame({"date": dates, "sales": [100.0 + i for i in range(365)]}))
+    assert (trend.slope, trend.slope_unit) == (pytest.approx(30.44, rel=1e-3), "month")
+
+
+def test_big_but_noisy_change_is_not_called_a_trend():
+    first = [100.0, 170, 30, 140, 60]
+    second = [110.0, 180, 40, 150, 70]  # halves differ by +10%, noise dwarfs it
+    df = pd.DataFrame({"date": pd.date_range("2024-01-07", periods=10, freq="W"), "sales": first + second})
+    [trend] = detect_trends(df)
+    assert trend.change_pct > 5 and trend.p_value >= 0.05  # precondition
+    assert trend.direction == "stable"
+    assert "isn't statistically significant" in trend.message
 
 
 def test_date_trend_rising_thirty_percent_is_up():

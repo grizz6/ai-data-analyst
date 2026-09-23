@@ -127,10 +127,10 @@ Problems with the file itself (empty, unreadable, bad sheet name) return 400 wit
 - **Missing values and constant columns** (`quality.py`): `isna().mean()` gives each column's null rate. Anything above 0% is `info`, 50% or more is a `warning`, and 90% or more is an `error`. A column with exactly one distinct non-null value is flagged as constant.
 - **IQR outliers** (`quality.py`): for each numeric, non-identifier column with at least 4 values, compute Q1, Q3, and `IQR = Q3 − Q1`, then count values outside `[Q1 − 1.5·IQR, Q3 + 1.5·IQR]` (Tukey's fences).
 - **Identifier detection** (`semantics.py`): column names are split into words across snake_case, camelCase, and spaces. Any word `id`, or a last word such as `uuid`, `key`, `sku`, `zip`, or `phone`, marks an identifier, while `paid` or `grid_size` don't match. A whole-number column counting up by one with no gaps or repeats over 20+ rows is a row counter whatever its name.
-- **Correlation ranking** (`analysis.py: top_correlations`): Pearson correlation across all numeric pairs, keeping pairs with `|r| ≥ 0.5` and returning the 10 strongest.
+- **Correlation ranking** (`analysis.py: top_correlations`): Pearson correlation across all numeric pairs, keeping pairs with `|r| ≥ 0.5` and returning the 10 strongest. Each pair carries `n` (rows where both columns have a value) and a two-sided p-value from `scipy.stats.pearsonr`; when `p ≥ 0.05` the insight says the correlation could be chance.
 - **Trend detection** (`analysis.py: detect_trends`), two methods:
-  - *Date-based:* sort by the first datetime column, then compare the mean of the first half against the second half for up to 3 numeric columns. More than +5% is "up", below −5% is "down", anything between is "stable".
-  - *Row-order proxy:* only when the file has no datetime column. For up to 5 numeric columns with at least 10 values, compare the mean of the first 5 rows to the mean of the last 5. A rise or fall of more than 10% is reported with its percentage.
+  - *Date-based:* sort by the first datetime column, then for up to 3 numeric columns compare the mean of the first half against the second half and fit a least-squares line (`scipy.stats.linregress`, slope reported per day, or per month for timelines over 90 days). A column is "up" or "down" only when the halves differ by more than 5% **and** the slope is significant (`p < 0.05`); a big change that could be noise is reported as stable, and says so.
+  - *Row-order proxy:* only when the file has no datetime column. For up to 5 numeric columns with at least 10 values, compare the mean of the first 5 rows to the mean of the last 5. A rise or fall of more than 10% with a significant slope over row number (`p < 0.05`) is reported with its percentage, slope, and p-value.
 - **Rule-based insights** (`insights.py`): converts dataset size, quality counts, numeric summaries, top categories, correlations (≥0.7 = "strong", otherwise "moderate"), trends, and column maximums into sentences, so the narrative is deterministic. A maximum points at its record by ID, or by its row in the original file.
 - **Grounding check** (`grounding.py`): extracts every number from the model's text and requires each to match a number in the facts it was sent, within the rounding its own decimal places imply (`0.98` matches `0.9832`, `0.99` doesn't). Totals, ratios, restated percentages, and invented figures fail. Signs are compared loosely, so "fell 3.5%" matches a change of `-3.5`; the check guarantees magnitudes, not direction words.
 - **Model calls** (`llm_client.py`): plain `httpx` in JSON mode with a 30 s timeout. Timeouts, connection errors, 429 and 5xx are retried twice with exponential backoff (honoring `Retry-After` up to 10 s). Other 4xx errors fail at once. Replies are validated with Pydantic before use.
@@ -151,6 +151,6 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 
 ## Built with
 
-**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, Plotly, Jinja2, Pydantic, httpx, openpyxl, pytest.
+**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, SciPy, Plotly, Jinja2, Pydantic, httpx, openpyxl, pytest.
 **Frontend:** React, TypeScript, Vite, Plotly.js.
 **CI:** GitHub Actions.

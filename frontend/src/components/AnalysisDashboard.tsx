@@ -4,6 +4,11 @@ import type { AnalysisResult } from "../types";
 import ChartGrid from "./ChartGrid";
 import DataTable from "./DataTable";
 
+function formatP(p: number | null): string {
+  if (p === null) return "p n/a";
+  return p < 0.001 ? "p < 0.001" : `p = ${p.toFixed(3)}`;
+}
+
 interface Props {
   result: AnalysisResult;
   loading?: boolean;
@@ -198,7 +203,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           <ul className="insight-list">
             {result.correlations.map((c, i) => (
               <li key={i}>
-                {c.column_a} ↔ {c.column_b}: <strong>{c.correlation}</strong>
+                {c.column_a} ↔ {c.column_b}: <strong>{c.correlation}</strong>{" "}
+                <span className="muted">
+                  (n = {c.n}, {formatP(c.p_value)})
+                </span>
               </li>
             ))}
           </ul>

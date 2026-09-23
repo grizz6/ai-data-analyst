@@ -316,3 +316,8 @@ table.data th {
 .scroll-table {
   overflow-x: auto;
 }
+
+.muted {
+  color: var(--muted);
+  font-size: 0.85em;
+}

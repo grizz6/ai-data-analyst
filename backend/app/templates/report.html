@@ -114,7 +114,7 @@
     {% if result.correlations %}
     <ul>
       {% for c in result.correlations %}
-      <li>{{ c.column_a }} ↔ {{ c.column_b }}: {{ c.correlation }}</li>
+      <li>{{ c.column_a }} ↔ {{ c.column_b }}: {{ c.correlation }} (n = {{ c.n }}, {{ c.p_value | pval }})</li>
       {% endfor %}
     </ul>
     {% else %}
