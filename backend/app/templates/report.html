@@ -34,11 +34,11 @@
 
   <section>
     <h2>Executive summary</h2>
-    <p>{{ result.llama.analysis_summary }}</p>
-    {% if result.llama.recommendations %}
+    <p>{{ result.explanation.analysis_summary }}</p>
+    {% if result.explanation.recommendations %}
     <h3>Recommendations</h3>
     <ul>
-      {% for rec in result.llama.recommendations %}
+      {% for rec in result.explanation.recommendations %}
       <li>{{ rec }}</li>
       {% endfor %}
     </ul>
@@ -47,7 +47,7 @@
 
   <section>
     <h2>Dataset overview</h2>
-    <p>{{ result.llama.dataset_overview }}</p>
+    <p>{{ result.explanation.dataset_overview }}</p>
   </section>
 
   <section>
@@ -143,10 +143,10 @@
     <h2>How this report was made</h2>
     <p class="note">
       Every number was computed with Pandas.
-      {% if result.llama.source == "llm" %}
-      The summary text was written by a language model ({{ result.llama.model }}) from those computed results. It was not allowed to calculate, and every number it wrote was checked against the analysis before this report was made.
-      {% elif result.llama.fallback_reason %}
-      A language model is configured but its text wasn't used ({{ result.llama.fallback_reason }}), so the summary was generated from rules instead.
+      {% if result.explanation.source == "llm" %}
+      The summary text was written by a language model ({{ result.explanation.model }}) from those computed results. It was not allowed to calculate, and every number it wrote was checked against the analysis before this report was made.
+      {% elif result.explanation.fallback_reason %}
+      A language model is configured but its text wasn't used ({{ result.explanation.fallback_reason }}), so the summary was generated from rules instead.
       {% else %}
       The summary text was generated from rules, with no language model involved.
       {% endif %}

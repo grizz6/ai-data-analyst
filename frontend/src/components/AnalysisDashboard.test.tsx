@@ -23,7 +23,7 @@ describe("AnalysisDashboard", () => {
 
   it("names the model when a language model wrote the summary", () => {
     const result = sampleResult();
-    result.llama = { ...result.llama, configured: true, source: "llm", model: "llama-3.3-70b-versatile" };
+    result.explanation = { ...result.explanation, configured: true, source: "llm", model: "llama-3.3-70b-versatile" };
 
     render(<AnalysisDashboard result={result} />);
 
@@ -32,8 +32,8 @@ describe("AnalysisDashboard", () => {
 
   it("explains a fallback when the model's text was rejected", () => {
     const result = sampleResult();
-    result.llama = {
-      ...result.llama,
+    result.explanation = {
+      ...result.explanation,
       configured: true,
       fallback_reason: "model wrote numbers not in the analysis: 37",
     };

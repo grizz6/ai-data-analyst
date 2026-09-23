@@ -145,9 +145,9 @@ export interface components {
             columns: components["schemas"]["ColumnProfile"][];
             /** Correlations */
             correlations: components["schemas"]["CorrelationPair"][];
+            explanation: components["schemas"]["Explanation"];
             /** Filename */
             filename: string;
-            llama: components["schemas"]["LlamaExplanation"];
             /** Numeric Summaries */
             numeric_summaries: components["schemas"]["NumericSummary"][];
             /** Preview Rows */
@@ -240,13 +240,8 @@ export interface components {
             /** P Value */
             p_value: number | null;
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
-        /** LlamaExplanation */
-        LlamaExplanation: {
+        /** Explanation */
+        Explanation: {
             /** Analysis Summary */
             analysis_summary: string;
             /** Chart Explanations */
@@ -272,6 +267,11 @@ export interface components {
              * @enum {string}
              */
             source: "rule_based" | "llm";
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
         };
         /** NumericSummary */
         NumericSummary: {

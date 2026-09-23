@@ -60,11 +60,11 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             )}
           </>
         )}
-        {!result.llama.configured && (
+        {!result.explanation.configured && (
           <> · Summaries are rule-based because no LLM API key is set on the server.</>
         )}
-        {result.llama.configured && result.llama.fallback_reason && (
-          <> · The language model's summary wasn't used ({result.llama.fallback_reason}), so it is rule-based.</>
+        {result.explanation.configured && result.explanation.fallback_reason && (
+          <> · The language model's summary wasn't used ({result.explanation.fallback_reason}), so it is rule-based.</>
         )}
       </div>
 
@@ -103,16 +103,16 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       <div className="panel">
         <h2>
           Summary{" "}
-          {result.llama.source === "llm" ? `(written by ${result.llama.model})` : "(rule-based)"}
+          {result.explanation.source === "llm" ? `(written by ${result.explanation.model})` : "(rule-based)"}
         </h2>
-        <p>{result.llama.dataset_overview}</p>
+        <p>{result.explanation.dataset_overview}</p>
         <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Analysis summary</h3>
-        <p style={{ whiteSpace: "pre-wrap" }}>{result.llama.analysis_summary}</p>
-        {result.llama.recommendations.length > 0 && (
+        <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
+        {result.explanation.recommendations.length > 0 && (
           <>
             <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Recommendations</h3>
             <ul>
-              {result.llama.recommendations.map((r, i) => (
+              {result.explanation.recommendations.map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </ul>
@@ -224,7 +224,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       <div className="panel">
         <h2>Visualizations</h2>
         <Suspense fallback={<p className="muted">Loading charts…</p>}>
-          <ChartGrid charts={result.charts} llama={result.llama} />
+          <ChartGrid charts={result.charts} explanation={result.explanation} />
         </Suspense>
       </div>
 

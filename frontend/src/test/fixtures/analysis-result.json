@@ -271,7 +271,7 @@
       }
     }
   ],
-  "llama": {
+  "explanation": {
     "dataset_overview": "'sales_sample.csv' has 31 rows and 5 columns after cleaning. 0 data quality issues were flagged before cleaning. Every figure in this analysis was computed with Pandas.",
     "chart_explanations": [],
     "analysis_summary": "'West' is most frequent (11 rows, ~35% of shown top values). 'Product A' is most frequent (16 rows, ~52% of shown top values). Strong positive correlation (0.9832, n = 31, p < 0.001) between 'sales' and 'units'. 'sales' was stable over 'date' (-0.6% between halves, fitted slope -94.18 per month, p = 0.595).",

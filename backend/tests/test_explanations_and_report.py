@@ -3,7 +3,7 @@ import asyncio
 import pandas as pd
 import pytest
 
-from app.services.llama import explain_analysis
+from app.services.explanation import explain_analysis
 from app.services.pipeline import run_full_analysis
 from app.services.report import format_number, render_html_report
 from tests.builders import with_outliers
@@ -40,7 +40,7 @@ def test_rule_based_explanation_has_no_placeholder_text(planted_result):
 
 
 def test_recommendations_come_from_the_planted_issues(planted_result):
-    recs = " ".join(planted_result.llama.recommendations)
+    recs = " ".join(planted_result.explanation.recommendations)
     assert "2 duplicate row(s) were removed" in recs
     assert "3 outlier(s) in 'amount'" in recs
 
@@ -48,7 +48,7 @@ def test_recommendations_come_from_the_planted_issues(planted_result):
 def test_clean_file_gets_an_all_clear_recommendation():
     df = pd.DataFrame({"a": range(20), "b": [x * 2 + 1 for x in range(20)]})
     result = analyze(df)
-    assert result.llama.recommendations == [
+    assert result.explanation.recommendations == [
         "No data quality problems were found, so the figures can be read as they are."
     ]
 

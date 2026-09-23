@@ -1,6 +1,6 @@
 import pytest
 
-from app.models.schemas import AnalysisResult, LlamaExplanation
+from app.models.schemas import AnalysisResult, Explanation
 from app.session_store import SessionStore
 
 
@@ -27,7 +27,7 @@ def result(session_id: str) -> AnalysisResult:
         trends=[],
         rule_insights=[],
         charts=[],
-        llama=LlamaExplanation(dataset_overview="", chart_explanations=[], analysis_summary="", recommendations=[]),
+        explanation=Explanation(dataset_overview="", chart_explanations=[], analysis_summary="", recommendations=[]),
         preview_rows=[],
         cleaned_preview_rows=[],
     )

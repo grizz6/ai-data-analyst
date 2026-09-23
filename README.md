@@ -53,7 +53,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations, trends |
 | 6 | `charts.py` | Up to 8 Plotly charts: histogram, bar, scatter, correlation heatmap, time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), box plot |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
-| 8 | `llama.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
+| 8 | `explanation.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
 | 9 | `report.py` | Renders `templates/report.html` with Jinja2, charts included |
 
 `pipeline.py` chains these for one upload. The Pandas work runs in a worker thread so one large file doesn't stall other requests; only the explanation step, which waits on the network, runs on the event loop.

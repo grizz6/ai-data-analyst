@@ -2,14 +2,14 @@ import uuid
 
 from starlette.concurrency import run_in_threadpool
 
-from app.models.schemas import AnalysisResult, LlamaExplanation, RuleInsight
+from app.models.schemas import AnalysisResult, Explanation, RuleInsight
 from app.services import (
     analysis,
     charts,
     cleaning,
+    explanation,
     ingestion,
     insights,
-    llama,
     profiling,
     quality,
     semantics,
@@ -24,8 +24,8 @@ async def run_full_analysis(
     # the event loop, so it runs in a worker thread. Only the explanation
     # step, which waits on network I/O, runs on the loop.
     result = await run_in_threadpool(compute_analysis, file_bytes, filename, sheet)
-    explanation = await llama.explain_analysis(result)
-    return result.model_copy(update={"llama": explanation})
+    summary = await explanation.explain_analysis(result)
+    return result.model_copy(update={"explanation": summary})
 
 
 def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None) -> AnalysisResult:
@@ -73,7 +73,7 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
             ),
         )
 
-    empty_explanation = LlamaExplanation(
+    empty_explanation = Explanation(
         dataset_overview="",
         chart_explanations=[],
         analysis_summary="",
@@ -97,7 +97,7 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
         trends=trends,
         rule_insights=rule_insights,
         charts=chart_specs,
-        llama=empty_explanation,
+        explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),
     )

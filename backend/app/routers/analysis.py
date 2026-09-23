@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models.schemas import AnalysisResult, QuestionRequest, QuestionResponse
-from app.services import llama, report
+from app.services import explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import get, save
@@ -103,7 +103,7 @@ async def ask_question(session_id: str, body: QuestionRequest):
     result = session_or_404(session_id)
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    return await llama.answer_question(result, body.question.strip())
+    return await explanation.answer_question(result, body.question.strip())
 
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)
@@ -141,7 +141,7 @@ def cleaned_filename(original: str) -> str:
 async def health():
     return {
         "status": "ok",
-        "llm_configured": llama.is_llama_configured(),
-        "llm_model": settings.llm_model if llama.is_llama_configured() else None,
+        "llm_configured": explanation.is_llm_configured(),
+        "llm_model": settings.llm_model if explanation.is_llm_configured() else None,
         "max_upload_mb": settings.max_upload_mb,
     }

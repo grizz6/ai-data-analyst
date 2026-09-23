@@ -22,7 +22,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.models.schemas import (
     AnalysisResult,
-    LlamaExplanation,
+    Explanation,
     ModelAnswer,
     ModelExplanation,
     QuestionResponse,
@@ -67,7 +67,7 @@ You answer a question about a dataset using only the results of an automated ana
 The JSON object must have exactly one key, "answer", holding your answer as a string."""
 
 
-def is_llama_configured() -> bool:
+def is_llm_configured() -> bool:
     return settings.llm_configured
 
 
@@ -122,7 +122,7 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
 
 def rule_based_explanation(
     result: AnalysisResult, *, configured: bool = False, fallback_reason: str | None = None
-) -> LlamaExplanation:
+) -> Explanation:
     issue_count = len(result.quality_issues)
     overview = (
         f"'{result.filename}' has {result.row_count:,} rows and {result.column_count} columns "
@@ -137,7 +137,7 @@ def rule_based_explanation(
         else "No strong correlations, trends, or dominant categories stood out in this file."
     )
 
-    return LlamaExplanation(
+    return Explanation(
         dataset_overview=overview,
         chart_explanations=[],
         analysis_summary=summary,
@@ -216,8 +216,8 @@ def rule_based_answer(
 # ---------------------------------------------------------------------------
 
 
-async def explain_analysis(result: AnalysisResult, client: LLMClient | None = None) -> LlamaExplanation:
-    if not is_llama_configured():
+async def explain_analysis(result: AnalysisResult, client: LLMClient | None = None) -> Explanation:
+    if not is_llm_configured():
         return rule_based_explanation(result, configured=False)
 
     client = client or make_client()
@@ -244,7 +244,7 @@ async def explain_analysis(result: AnalysisResult, client: LLMClient | None = No
         return _explanation_fallback(result, f"model wrote numbers not in the analysis: {', '.join(invented[:5])}")
 
     _log_call("explain", reply, outcome="ok")
-    return LlamaExplanation(
+    return Explanation(
         dataset_overview=parsed.dataset_overview,
         analysis_summary=parsed.analysis_summary,
         recommendations=parsed.recommendations,
@@ -258,7 +258,7 @@ async def explain_analysis(result: AnalysisResult, client: LLMClient | None = No
 async def answer_question(
     result: AnalysisResult, question: str, client: LLMClient | None = None
 ) -> QuestionResponse:
-    if not is_llama_configured():
+    if not is_llm_configured():
         return rule_based_answer(result, configured=False)
 
     client = client or make_client()
@@ -281,7 +281,7 @@ async def answer_question(
     return QuestionResponse(answer=parsed.answer, configured=True, source="llm")
 
 
-def _explanation_fallback(result: AnalysisResult, reason: str) -> LlamaExplanation:
+def _explanation_fallback(result: AnalysisResult, reason: str) -> Explanation:
     logger.warning("LLM explanation fell back to rule-based text: %s", reason)
     return rule_based_explanation(result, configured=True, fallback_reason=reason)
 

@@ -15,11 +15,11 @@ export type ChartSpec = Schemas["ChartSpec"];
 export type CleaningAction = Schemas["CleaningAction"];
 export type ColumnProfile = Schemas["ColumnProfile"];
 export type CorrelationPair = Schemas["CorrelationPair"];
-export type LlamaExplanation = Schemas["LlamaExplanation"];
+export type Explanation = Schemas["Explanation"];
 export type NumericSummary = Schemas["NumericSummary"];
 export type QualityIssue = Schemas["QualityIssue"];
 export type QuestionResponse = Schemas["QuestionResponse"];
 export type RuleInsight = Schemas["RuleInsight"];
 export type TrendInsight = Schemas["TrendInsight"];
 
-export type ExplanationSource = LlamaExplanation["source"];
+export type ExplanationSource = Explanation["source"];

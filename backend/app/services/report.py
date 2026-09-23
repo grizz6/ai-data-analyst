@@ -30,6 +30,6 @@ def render_html_report(result: AnalysisResult) -> str:
     template = _env.get_template("report.html")
     return template.render(
         result=result,
-        chart_notes={e["chart_id"]: e["explanation"] for e in result.llama.chart_explanations},
+        chart_notes={e["chart_id"]: e["explanation"] for e in result.explanation.chart_explanations},
         generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
     )

@@ -1,20 +1,18 @@
 import Plotly from "plotly.js-cartesian-dist-min";
 import createPlotlyComponent from "react-plotly.js/factory";
+import type { ChartSpec, Explanation } from "../types";
 
 // The default react-plotly.js import bundles all of Plotly (3D, maps, and more).
 // Every chart here is 2D, so the smaller cartesian build is enough.
 const Plot = createPlotlyComponent(Plotly);
-import type { ChartSpec, LlamaExplanation } from "../types";
 
 interface Props {
   charts: ChartSpec[];
-  llama: LlamaExplanation;
+  explanation: Explanation;
 }
 
-export default function ChartGrid({ charts, llama }: Props) {
-  const explanations = new Map(
-    llama.chart_explanations.map((e) => [e.chart_id, e.explanation])
-  );
+export default function ChartGrid({ charts, explanation }: Props) {
+  const notes = new Map(explanation.chart_explanations.map((e) => [e.chart_id, e.explanation]));
 
   if (!charts.length) {
     return <p style={{ color: "var(--muted)" }}>No charts could be generated for this dataset.</p>;
@@ -41,8 +39,8 @@ export default function ChartGrid({ charts, llama }: Props) {
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: "100%" }}
           />
-          {explanations.get(chart.id) && (
-            <p className="chart-explain">{explanations.get(chart.id)}</p>
+          {notes.get(chart.id) && (
+            <p className="chart-explain">{notes.get(chart.id)}</p>
           )}
         </div>
       ))}

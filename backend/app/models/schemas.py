@@ -92,7 +92,7 @@ class ChartSpec(ApiModel):
 ExplanationSource = Literal["rule_based", "llm"]
 
 
-class LlamaExplanation(ApiModel):
+class Explanation(ApiModel):
     dataset_overview: str
     chart_explanations: list[dict[str, str]]
     analysis_summary: str
@@ -134,7 +134,7 @@ class AnalysisResult(ApiModel):
     trends: list[TrendInsight]
     rule_insights: list[RuleInsight]
     charts: list[ChartSpec]
-    llama: LlamaExplanation
+    explanation: Explanation
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
 
