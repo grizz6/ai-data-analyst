@@ -17,7 +17,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
 | Tests and CI | 128 pytest tests. GitHub Actions runs them, plus a frontend type-check and build, on every push |
-| Persistence | **Not yet.** Results live in memory (`session_store.py`) and disappear on restart |
+| Persistence | **Not yet.** Results live in memory (`session_store.py`), expire after 60 minutes without use, are capped at 20 sessions, and disappear on restart |
 | Deployment | **Not yet.** Runs locally |
 
 ---
@@ -94,6 +94,8 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 |---|---|---|
 | `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
+| `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
+| `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
@@ -143,7 +145,7 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 
 ## Known limits
 
-- Results are kept in memory, so a restart loses them, and there is no expiry.
+- Results are kept in memory, so a restart loses them.
 - Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.

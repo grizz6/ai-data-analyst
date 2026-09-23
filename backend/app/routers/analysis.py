@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
-from app.models.schemas import QuestionRequest, QuestionResponse
+from app.models.schemas import AnalysisResult, QuestionRequest, QuestionResponse
 from app.services import llama, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
@@ -17,6 +17,19 @@ router = APIRouter(prefix="/api", tags=["analysis"])
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
 READ_CHUNK_BYTES = 1024 * 1024
+
+
+def session_or_404(session_id: str) -> AnalysisResult:
+    result = get(session_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "This analysis wasn't found. Results are kept for "
+                f"{settings.session_ttl_minutes} minutes after last use; upload the file again."
+            ),
+        )
+    return result
 
 
 def too_large_detail() -> str:
@@ -79,17 +92,13 @@ async def upload_dataset(
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str):
-    result = get(session_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Session not found.")
+    result = session_or_404(session_id)
     return result.model_dump(mode="json")
 
 
 @router.post("/sessions/{session_id}/ask", response_model=QuestionResponse)
 async def ask_question(session_id: str, body: QuestionRequest):
-    result = get(session_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Session not found.")
+    result = session_or_404(session_id)
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
     return await llama.answer_question(result, body.question.strip())
@@ -97,9 +106,7 @@ async def ask_question(session_id: str, body: QuestionRequest):
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)
 async def download_report(session_id: str):
-    result = get(session_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Session not found.")
+    result = session_or_404(session_id)
     # Serializing every chart into the template takes real CPU on big results.
     html = await run_in_threadpool(report.render_html_report, result)
     return HTMLResponse(

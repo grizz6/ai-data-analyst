@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     app_name: str = "AI Data Analyst Agent"
     max_upload_mb: int = 10
     missing_threshold_drop: float = 0.9
+    session_ttl_minutes: int = 60
+    max_sessions: int = 20
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Language model used only to explain results. Any OpenAI-compatible
