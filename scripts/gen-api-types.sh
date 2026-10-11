@@ -13,7 +13,10 @@ PYTHON="${PYTHON:-$ROOT/backend/.venv/bin/python}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-PYTHONPATH="$ROOT/backend" "$PYTHON" -c '
+# Point at a frontend build that doesn't exist, so the schema is the same whether
+# or not frontend/dist happens to be built on this machine (with a build, the
+# app serves it at "/" instead of registering its JSON root route).
+ADA_FRONTEND_DIST="$WORK/no-frontend-build" PYTHONPATH="$ROOT/backend" "$PYTHON" -c '
 import json, sys
 from app.main import app
 json.dump(app.openapi(), sys.stdout, indent=2, sort_keys=True)
