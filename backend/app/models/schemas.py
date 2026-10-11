@@ -270,15 +270,34 @@ class ModelRequest(ApiModel):
 
 class ModelScore(ApiModel):
     name: str
-    # Classification: accuracy and macro F1. Regression: R² and mean absolute error.
-    primary: float
-    primary_std: float
-    secondary: float
+    # "baseline", "linear", "neighbours", "bayes", "tree", "bagging", "boosting" or "kernel"
+    family: str
+    # The task's main metric (accuracy, or R²): mean and spread over cross-validation
+    # folds of the training rows, then on the training rows themselves and on the held-out test rows.
+    cv_mean: float
+    cv_std: float
+    train_score: float
+    test_score: float
+    # Macro F1 for classification, mean absolute error for regression, on the test rows.
+    test_secondary: float
+    # Area under the ROC curve on the test rows, for classification when the model gives scores.
+    test_auc: float | None = None
+    fit_seconds: float
+    # Train score more than 0.1 above test score.
+    overfit: bool
 
 
 class FeatureImportance(ApiModel):
     feature: str
+    # Drop in the test score when this column is shuffled (permutation importance).
     importance: float
+    spread: float
+
+
+class TargetSuggestion(ApiModel):
+    column: str
+    task: Literal["classification", "regression"]
+    reason: str
 
 
 class ModelReport(ApiModel):
@@ -287,13 +306,19 @@ class ModelReport(ApiModel):
     primary_metric: str
     secondary_metric: str
     rows_used: int
+    train_rows: int
+    test_rows: int
     features: list[str]
     dropped_features: list[str] = Field(default_factory=list)
     folds: int
     scores: list[ModelScore]
+    # Chosen by cross-validation score, never by the test rows.
     best_model: str
     beats_baseline: bool
+    # Further test-set measures for the best model (e.g. precision, recall, RMSE).
+    best_test_metrics: dict[str, float] = Field(default_factory=dict)
     importances: list[FeatureImportance] = Field(default_factory=list)
+    charts: list[ChartSpec] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     summary: str
 
@@ -333,6 +358,8 @@ class AnalysisResult(ApiModel):
     time_axis: TimeAxisInfo | None = None
     time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
     clustering: ClusterAnalysis | None = None
+    # Columns worth predicting, most likely first; the Models tab trains the first one.
+    model_targets: list[TargetSuggestion] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
     # Questions asked so far, oldest first. Kept with the session, so the thread

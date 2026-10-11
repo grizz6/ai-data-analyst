@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { jsonResponse, sampleResult } from "../test/fixtures";
 import AnalysisDashboard from "./AnalysisDashboard";
 
+// The Models panel trains on load and is tested on its own.
+vi.mock("./MachineLearningPanel", () => ({ default: () => <div data-testid="ml-panel" /> }));
 // Plotly needs a real canvas and layout engine; the chart grid has nothing to test here.
 vi.mock("./ChartGrid", () => ({
   default: ({ charts }: { charts: unknown[] }) => <div data-testid="chart-grid">{charts.length} charts</div>,

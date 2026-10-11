@@ -5,6 +5,8 @@ import App from "./App";
 import { loadRecent, rememberAnalysis } from "./recent";
 import { jsonResponse, sampleResult } from "./test/fixtures";
 
+// The Models panel trains on load and is tested on its own.
+vi.mock("./components/MachineLearningPanel", () => ({ default: () => <div data-testid="ml-panel" /> }));
 vi.mock("./components/ChartGrid", () => ({ default: () => <div /> }));
 
 const entry = (sessionId: string) => ({ sessionId, filename: "old.csv", rows: 12, columns: 3, openedAt: Date.now() });

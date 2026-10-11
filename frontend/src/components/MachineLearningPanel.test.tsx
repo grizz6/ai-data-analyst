@@ -4,34 +4,59 @@ import { describe, expect, it, vi } from "vitest";
 import { jsonResponse, sampleResult } from "../test/fixtures";
 import MachineLearningPanel from "./MachineLearningPanel";
 
-vi.mock("./ChartGrid", () => ({ default: () => <div data-testid="cluster-chart" /> }));
+vi.mock("./ChartGrid", () => ({
+  default: ({ charts }: { charts: { title: string }[] }) => <div data-testid="charts">{charts.map((c) => c.title).join(" | ")}</div>,
+}));
+
+const score = (name: string, family: string, cv: number, train: number, test: number, overfit = false) => ({
+  name,
+  family,
+  cv_mean: cv,
+  cv_std: 0.02,
+  train_score: train,
+  test_score: test,
+  test_secondary: 100,
+  test_auc: null,
+  fit_seconds: 0.4,
+  overfit,
+});
 
 const report = {
   target: "sales",
   task: "regression",
   primary_metric: "R²",
-  secondary_metric: "mean absolute error",
+  secondary_metric: "MAE",
   rows_used: 31,
+  train_rows: 24,
+  test_rows: 7,
   features: ["region", "product", "units"],
   dropped_features: ["date"],
-  folds: 5,
+  folds: 3,
   scores: [
-    { name: "Baseline (average)", primary: -0.52, primary_std: 0.7, secondary: 2867.9 },
-    { name: "Linear regression (ridge)", primary: 0.9876, primary_std: 0.0067, secondary: 264.3 },
+    score("Baseline (average)", "baseline", -0.2, 0, -0.15),
+    score("Linear regression", "linear", 0.961, 0.996, 0.995),
+    score("Decision tree", "tree", 0.6, 1.0, 0.7, true),
   ],
-  best_model: "Linear regression (ridge)",
+  best_model: "Linear regression",
   beats_baseline: true,
-  importances: [
-    { feature: "units", importance: 0.9 },
-    { feature: "product", importance: 0.06 },
-  ],
-  notes: ["Left out as inputs: date."],
-  summary: "'sales' can be predicted from the other columns.",
+  best_test_metrics: { "R²": 0.9946, MAE: 232.52, RMSE: 322.03 },
+  importances: [],
+  charts: [{ id: "model_comparison", title: "Models compared (R²)", chart_type: "bar", plotly_json: {} }],
+  notes: ["Not used as inputs: date."],
+  summary: "Best for 'sales': Linear regression, test R² 0.99 vs -0.15 baseline.",
 };
 
-function renderPanel() {
+function renderPanel(autoTrain = false) {
   const result = sampleResult();
-  render(<MachineLearningPanel sessionId={result.session_id} columns={result.columns} clustering={result.clustering} />);
+  render(
+    <MachineLearningPanel
+      sessionId={result.session_id}
+      columns={result.columns}
+      clustering={result.clustering}
+      suggestions={result.model_targets}
+      autoTrain={autoTrain}
+    />,
+  );
   return result;
 }
 
@@ -40,31 +65,36 @@ describe("MachineLearningPanel", () => {
     renderPanel();
     expect(screen.getByText(/fall into 3 groups/)).toBeInTheDocument();
     expect(screen.getAllByText(/^Group \d$/)).toHaveLength(3);
-    expect(await screen.findByTestId("cluster-chart")).toBeInTheDocument();
   });
 
-  it("offers every non-identifier, non-date column as a target and shows the comparison", async () => {
+  it("trains the suggested target straight away and shows train, CV and test scores", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(report));
     vi.stubGlobal("fetch", fetchMock);
-    const result = renderPanel();
-
-    const select = screen.getByLabelText("Column to predict");
-    expect([...select.querySelectorAll("option")].map((o) => o.textContent)).toEqual([
-      "Choose…",
-      "region",
-      "product",
-      "sales",
-      "units",
-    ]);
-    await userEvent.selectOptions(select, "sales");
-    await userEvent.click(screen.getByRole("button", { name: "Train and compare" }));
+    const result = renderPanel(true);
 
     const results = await screen.findByLabelText("Model results");
-    expect(within(results).getByText("'sales' can be predicted from the other columns.")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ target: "sales" });
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/sessions/${result.session_id}/model`);
     const best = within(results).getByText("best").closest("tr") as HTMLElement;
-    expect(within(best).getByText("0.988")).toBeInTheDocument();
-    expect(within(results).getByText("units")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(`/api/sessions/${result.session_id}/model`, expect.objectContaining({ method: "POST" }));
+    expect(within(best).getByText("0.995")).toBeInTheDocument(); // test score
+    const tree = within(results).getByText("Decision tree").closest("tr") as HTMLElement;
+    expect(within(tree).getByText("overfits")).toBeInTheDocument();
+    expect(within(results).getByText("RMSE")).toBeInTheDocument();
+    expect(within(results).getByTestId("charts")).toHaveTextContent("Models compared (R²)");
+  });
+
+  it("lists suggested targets first, and trains another on request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ...report, target: "region" }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderPanel();
+
+    const select = screen.getByLabelText("Column to predict");
+    expect(select.querySelectorAll("option")[1]).toHaveTextContent("sales (suggested)");
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.selectOptions(select, "region");
+    await userEvent.click(screen.getByRole("button", { name: "Train and compare" }));
+    await screen.findByLabelText("Model results");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ target: "region" });
   });
 
   it("shows the server's reason when a column can't be predicted", async () => {
@@ -77,7 +107,7 @@ describe("MachineLearningPanel", () => {
 
   it("explains when there's nothing to group", () => {
     const result = sampleResult();
-    render(<MachineLearningPanel sessionId="s" columns={result.columns} clustering={null} />);
+    render(<MachineLearningPanel sessionId="s" columns={result.columns} clustering={null} suggestions={[]} />);
     expect(screen.getByText(/needs at least two numeric columns and 50 rows/)).toBeInTheDocument();
   });
 });

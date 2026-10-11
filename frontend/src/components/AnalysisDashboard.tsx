@@ -364,7 +364,13 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
       <div id="machine-learning" className="panel">
         <h2>Machine learning</h2>
-        <MachineLearningPanel sessionId={result.session_id} columns={result.columns} clustering={result.clustering} />
+        <MachineLearningPanel
+          sessionId={result.session_id}
+          columns={result.columns}
+          clustering={result.clustering}
+          suggestions={result.model_targets}
+          autoTrain
+        />
       </div>
 
       <div id="charts" className="panel">

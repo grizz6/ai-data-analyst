@@ -847,3 +847,12 @@ td .badge.good {
   background: var(--accent);
   min-width: 2px;
 }
+
+.takeaway {
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+
+.stat .value.small-value {
+  font-size: 1rem;
+}

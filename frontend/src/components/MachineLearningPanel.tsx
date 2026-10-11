@@ -1,7 +1,7 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { trainModel } from "../api";
 import { formatNumber } from "../format";
-import type { ClusterAnalysis, ColumnProfile, Explanation, ModelReport } from "../types";
+import type { ClusterAnalysis, ColumnProfile, Explanation, ModelReport, TargetSuggestion } from "../types";
 
 const ChartGrid = lazy(() => import("./ChartGrid"));
 
@@ -20,26 +20,43 @@ interface Props {
   sessionId: string;
   columns: ColumnProfile[];
   clustering: ClusterAnalysis | null;
+  suggestions: TargetSuggestion[];
+  /** Train the first suggested target as soon as the panel appears. */
+  autoTrain?: boolean;
 }
 
-export default function MachineLearningPanel({ sessionId, columns, clustering }: Props) {
-  const targets = columns.filter((c) => !c.is_identifier && !c.dtype.startsWith("datetime")).map((c) => c.name);
-  const [target, setTarget] = useState("");
+export default function MachineLearningPanel({ sessionId, columns, clustering, suggestions, autoTrain = false }: Props) {
+  const suggested = suggestions.map((t) => t.column);
+  const others = columns
+    .filter((c) => !c.is_identifier && !c.dtype.startsWith("datetime") && !suggested.includes(c.name))
+    .map((c) => c.name);
+  const targets = [...suggested, ...others];
+  const [target, setTarget] = useState(autoTrain ? (suggested[0] ?? "") : "");
   const [report, setReport] = useState<ModelReport | null>(null);
   const [training, setTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleTrain = async () => {
+  const handleTrain = async (column: string = target) => {
     setTraining(true);
     setError(null);
     try {
-      setReport(await trainModel(sessionId, target));
+      setReport(await trainModel(sessionId, column));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Prediction failed");
     } finally {
       setTraining(false);
     }
   };
+
+  const started = useRef(false);
+  useEffect(() => {
+    if (autoTrain && suggested[0] && !started.current) {
+      started.current = true;
+      void handleTrain(suggested[0]);
+    }
+    // Runs once per analysis; the panel is re-mounted for a new one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -113,16 +130,20 @@ export default function MachineLearningPanel({ sessionId, columns, clustering }:
               <option value="">Choose…</option>
               {targets.map((name) => (
                 <option key={name} value={name}>
-                  {name}
+                  {suggested.includes(name) ? `${name} (suggested)` : name}
                 </option>
               ))}
             </select>
           </label>
-          <button type="button" className="btn" disabled={!target || training} onClick={handleTrain}>
+          <button type="button" className="btn" disabled={!target || training} onClick={() => handleTrain()}>
             {training ? "Training models…" : "Train and compare"}
           </button>
         </div>
-        {training && <p className="muted small">This can take a minute on large files.</p>}
+        {training && (
+          <p className="muted small" role="status">
+            Training {report ? "" : "11 models "}on {target}… up to a few minutes on large files.
+          </p>
+        )}
         {error && (
           <p className="error-msg" role="alert">
             {error}
@@ -134,55 +155,98 @@ export default function MachineLearningPanel({ sessionId, columns, clustering }:
   );
 }
 
+function pct(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function ModelResults({ report }: { report: ModelReport }) {
-  const top = report.importances[0]?.importance || 1;
+  const classification = report.task === "classification";
+  const show = (value: number) => (classification ? pct(value) : value.toFixed(3));
+  const best = report.scores.find((s) => s.name === report.best_model)!;
+  const ranked = [...report.scores].sort((a, b) => b.cv_mean - a.cv_mean);
   return (
     <div className="model-results" aria-label="Model results">
-      <p>{report.summary}</p>
+      <p className="takeaway">{report.summary}</p>
+      <div className="stats">
+        <div className="stat">
+          <div className="label">Best model</div>
+          <div className="value small-value">{report.best_model}</div>
+        </div>
+        <div className="stat">
+          <div className="label">Test {report.primary_metric}</div>
+          <div className="value">{show(best.test_score)}</div>
+        </div>
+        <div className="stat">
+          <div className="label">CV {report.primary_metric}</div>
+          <div className="value">
+            {show(best.cv_mean)} <span className="muted small">±{show(best.cv_std)}</span>
+          </div>
+        </div>
+        {Object.entries(report.best_test_metrics)
+          .filter(([name]) => name !== report.primary_metric && name !== "accuracy")
+          .slice(0, 3)
+          .map(([name, value]) => (
+            <div className="stat" key={name}>
+              <div className="label">{name}</div>
+              <div className="value">{formatNumber(value)}</div>
+            </div>
+          ))}
+        <div className="stat">
+          <div className="label">Train / test rows</div>
+          <div className="value">
+            {report.train_rows.toLocaleString()} / {report.test_rows.toLocaleString()}
+          </div>
+        </div>
+      </div>
+
       <div className="scroll-table">
         <table className="data">
           <thead>
             <tr>
               <th>Model</th>
-              <th className="num">{report.primary_metric}</th>
-              <th className="num">± across folds</th>
-              <th className="num">{report.secondary_metric}</th>
+              <th>Type</th>
+              <th className="num" title={`${report.folds}-fold cross-validation on the training rows`}>
+                CV {report.primary_metric}
+              </th>
+              <th className="num">Train</th>
+              <th className="num">Test</th>
+              <th className="num">Test {report.secondary_metric}</th>
+              {classification && <th className="num">Test AUC</th>}
+              <th className="num">Seconds</th>
+              <th />
             </tr>
           </thead>
           <tbody>
-            {report.scores.map((s) => (
+            {ranked.map((s) => (
               <tr key={s.name} className={s.name === report.best_model ? "best" : undefined}>
-                <td>
-                  {s.name}
-                  {s.name === report.best_model && <span className="badge good">best</span>}
+                <td>{s.name}</td>
+                <td className="muted">{s.family}</td>
+                <td className="num">
+                  {show(s.cv_mean)} <span className="muted">±{show(s.cv_std)}</span>
                 </td>
-                <td className="num">{report.task === "classification" ? `${(s.primary * 100).toFixed(1)}%` : s.primary.toFixed(3)}</td>
-                <td className="num">{report.task === "classification" ? `${(s.primary_std * 100).toFixed(1)}` : s.primary_std.toFixed(3)}</td>
-                <td className="num">{formatNumber(s.secondary)}</td>
+                <td className="num">{show(s.train_score)}</td>
+                <td className="num">{show(s.test_score)}</td>
+                <td className="num">{formatNumber(s.test_secondary)}</td>
+                {classification && <td className="num">{s.test_auc === null ? "–" : s.test_auc.toFixed(3)}</td>}
+                <td className="num">{s.fit_seconds.toFixed(1)}</td>
+                <td>
+                  {s.name === report.best_model && <span className="badge good">best</span>}
+                  {s.overfit && (
+                    <span className="badge warning" title="Train score more than 0.1 above test score">
+                      overfits
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {report.importances.length > 0 && (
-        <>
-          <h4>What matters most (random forest)</h4>
-          <ul className="importance-list">
-            {report.importances.map((i) => (
-              <li key={i.feature}>
-                <span className="importance-name">{i.feature}</span>
-                <span className="importance-bar" style={{ width: `${(i.importance / top) * 100}%` }} />
-                <span className="muted small">{(i.importance * 100).toFixed(1)}%</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      <p className="muted small">
-        {report.rows_used.toLocaleString()} rows, {report.features.length} input columns, {report.folds}-fold
-        cross-validation.{" "}
-        {report.notes.join(" ")}
-      </p>
+
+      <Suspense fallback={<p className="muted">Loading charts…</p>}>
+        <ChartGrid charts={report.charts} explanation={NO_NOTES} />
+      </Suspense>
+      {report.notes.length > 0 && <p className="muted small">{report.notes.join(" ")}</p>}
     </div>
   );
 }

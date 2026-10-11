@@ -141,7 +141,7 @@ export interface paths {
         put?: never;
         /**
          * Predict Column
-         * @description Compare models that predict one column from the others, with cross-validation.
+         * @description Compare models that predict one column from the others: held-out test set plus cross-validation.
          */
         post: operations["predict_column_api_sessions__session_id__model_post"];
         delete?: never;
@@ -214,6 +214,8 @@ export interface components {
             explanation: components["schemas"]["Explanation"];
             /** Filename */
             filename: string;
+            /** Model Targets */
+            model_targets: components["schemas"]["TargetSuggestion"][];
             /** Numeric Summaries */
             numeric_summaries: components["schemas"]["NumericSummary"][];
             /** Preview Rows */
@@ -471,6 +473,8 @@ export interface components {
             feature: string;
             /** Importance */
             importance: number;
+            /** Spread */
+            spread: number;
         };
         /** ForecastPoint */
         ForecastPoint: {
@@ -536,6 +540,12 @@ export interface components {
             beats_baseline: boolean;
             /** Best Model */
             best_model: string;
+            /** Best Test Metrics */
+            best_test_metrics: {
+                [key: string]: number;
+            };
+            /** Charts */
+            charts: components["schemas"]["ChartSpec"][];
             /** Dropped Features */
             dropped_features: string[];
             /** Features */
@@ -563,6 +573,10 @@ export interface components {
              * @enum {string}
              */
             task: "classification" | "regression";
+            /** Test Rows */
+            test_rows: number;
+            /** Train Rows */
+            train_rows: number;
         };
         /** ModelRequest */
         ModelRequest: {
@@ -571,14 +585,26 @@ export interface components {
         };
         /** ModelScore */
         ModelScore: {
+            /** Cv Mean */
+            cv_mean: number;
+            /** Cv Std */
+            cv_std: number;
+            /** Family */
+            family: string;
+            /** Fit Seconds */
+            fit_seconds: number;
             /** Name */
             name: string;
-            /** Primary */
-            primary: number;
-            /** Primary Std */
-            primary_std: number;
-            /** Secondary */
-            secondary: number;
+            /** Overfit */
+            overfit: boolean;
+            /** Test Auc */
+            test_auc: number | null;
+            /** Test Score */
+            test_score: number;
+            /** Test Secondary */
+            test_secondary: number;
+            /** Train Score */
+            train_score: number;
         };
         /** NumericSummary */
         NumericSummary: {
@@ -686,6 +712,18 @@ export interface components {
             missing_patterns: components["schemas"]["MissingPattern"][];
             /** Rank Correlations */
             rank_correlations: components["schemas"]["RankCorrelation"][];
+        };
+        /** TargetSuggestion */
+        TargetSuggestion: {
+            /** Column */
+            column: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Task
+             * @enum {string}
+             */
+            task: "classification" | "regression";
         };
         /** TimeAxisInfo */
         TimeAxisInfo: {

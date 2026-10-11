@@ -11,6 +11,7 @@ from app.services import (
     ingestion,
     insights,
     ml,
+    modeling,
     profiling,
     quality,
     semantics,
@@ -61,6 +62,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     axis = timeaxis.find_time_axis(prepared_df)
     time_series = timeseries.analyze_time_series(metrics_df, axis) if axis else []
     clustering = ml.cluster(metrics_df)
+    model_targets = modeling.suggest_targets(metrics_df)
     rule_insights = insights.generate_rule_insights(
         prepared_df,
         quality_issues,
@@ -131,6 +133,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         time_axis=TimeAxisInfo(kind=axis.kind, columns=axis.columns, label=axis.label) if axis else None,
         time_series=time_series,
         clustering=clustering,
+        model_targets=model_targets,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

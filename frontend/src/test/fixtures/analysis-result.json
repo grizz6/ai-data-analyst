@@ -650,5 +650,27 @@
       "date"
     ],
     "label": "date"
-  }
+  },
+  "model_targets": [
+    {
+      "column": "sales",
+      "task": "regression",
+      "reason": "name suggests an outcome"
+    },
+    {
+      "column": "units",
+      "task": "regression",
+      "reason": "last column"
+    },
+    {
+      "column": "region",
+      "task": "classification",
+      "reason": "can be predicted"
+    },
+    {
+      "column": "product",
+      "task": "classification",
+      "reason": "can be predicted"
+    }
+  ]
 }

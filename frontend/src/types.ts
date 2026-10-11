@@ -26,6 +26,7 @@ export type StatisticalTests = Schemas["StatisticalTests"];
 export type TimeSeriesAnalysis = Schemas["TimeSeriesAnalysis"];
 export type ClusterAnalysis = Schemas["ClusterAnalysis"];
 export type ModelReport = Schemas["ModelReport"];
+export type TargetSuggestion = Schemas["TargetSuggestion"];
 export type TrendInsight = Schemas["TrendInsight"];
 
 export type ExplanationSource = Explanation["source"];
