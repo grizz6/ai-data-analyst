@@ -81,3 +81,19 @@ def test_report_embeds_every_chart_and_has_no_placeholder_text(planted_result):
 )
 def test_format_number(value, expected):
     assert format_number(value) == expected
+
+
+def test_print_view_is_shown_inline_and_opens_the_print_dialog(client, sample_csv_bytes):
+    session_id = client.post("/api/upload", files={"file": ("s.csv", sample_csv_bytes, "text/csv")}).json()[
+        "session_id"
+    ]
+
+    download = client.get(f"/api/sessions/{session_id}/report")
+    assert "attachment" in download.headers["content-disposition"]
+    assert "window.print()" not in download.text
+
+    printable = client.get(f"/api/sessions/{session_id}/report?print=true")
+    assert printable.status_code == 200
+    assert "content-disposition" not in printable.headers
+    assert '<body class="print">' in printable.text
+    assert "window.print()" in printable.text

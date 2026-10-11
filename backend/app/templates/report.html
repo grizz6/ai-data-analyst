@@ -25,10 +25,25 @@
     .chart-card { background: var(--card-2); border-radius: 10px; padding: 0.75rem; min-width: 0; }
     .chart-card h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
     .chart { width: 100%; height: 320px; }
+    .qa { margin-bottom: 1rem; } .qa p { margin: 0.25rem 0; } .qa .answer { white-space: pre-wrap; } .qa .src { color: var(--muted); font-size: 0.85rem; }
     @media (max-width: 600px) { body { padding: 1rem; } section { padding: 1rem; } }
+    /* Print view (Save as PDF): light colors on screen too, so the preview matches the PDF. */
+    body.print { --bg: #fff; --card: #fff; --card-2: #f6f8fb; --text: #111827; --muted: #4b5563; --accent: #2563eb; --warn: #b45309; --error: #b91c1c; }
+    body.print h1, body.print h2 { color: #111827; }
+    body.print section { border: 1px solid #e5e7eb; }
+    body.print th, body.print td { border-bottom-color: #e5e7eb; }
+    body.print .badge { background: #e5e7eb; }
+    body.print .badge.warning { background: #fef3c7; }
+    body.print .badge.error { background: #fee2e2; }
+    @media print {
+      body { padding: 0; }
+      section, .chart-card, tr, .qa { break-inside: avoid; }
+      h2 { break-after: avoid; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
-<body>
+<body{% if for_print %} class="print"{% endif %}>
   <h1>Data Analysis Report</h1>
   <p class="meta">{{ result.filename }} · {{ result.row_count | num }} rows · {{ result.column_count }} columns · Generated {{ generated_at }}</p>
 
@@ -139,6 +154,19 @@
   </section>
   {% endif %}
 
+  {% if result.chat_history %}
+  <section>
+    <h2>Questions asked</h2>
+    {% for turn in result.chat_history %}
+    <div class="qa">
+      <p><strong>Q:</strong> {{ turn.question }}</p>
+      <p class="answer"><strong>A:</strong> {{ turn.answer }}
+        <span class="src">({% if turn.source == "llm" %}written by {{ turn.model }}{% else %}rule-based{% endif %})</span></p>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
   <section>
     <h2>How this report was made</h2>
     <p class="note">
@@ -155,23 +183,31 @@
 
   {% if result.charts %}
   <script src="https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js" charset="utf-8"></script>
+  {% endif %}
   <script>
     (function () {
-      if (!window.Plotly) return;
+      var drawn = [];
+      {% if result.charts %}
       var charts = {{ result.charts | map(attribute="plotly_json") | list | tojson }};
       charts.forEach(function (fig, i) {
         var layout = Object.assign({}, fig.layout || {}, {
           paper_bgcolor: "transparent",
           plot_bgcolor: "transparent",
-          font: { color: "#e7ecf3", size: 11 },
+          font: { color: "{{ '#111827' if for_print else '#e7ecf3' }}", size: 11 },
           margin: { t: 16, r: 16, b: 40, l: 48 },
           autosize: true
         });
         delete layout.title; // the card heading already shows it
-        Plotly.newPlot("chart-" + (i + 1), fig.data, layout, { displayModeBar: false, responsive: true });
+        if (window.Plotly) {
+          drawn.push(Plotly.newPlot("chart-" + (i + 1), fig.data, layout, { displayModeBar: false, responsive: !{{ for_print | tojson }} }));
+        }
       });
+      {% endif %}
+      {% if for_print %}
+      // Open the print dialog once every chart is drawn, so they are in the PDF.
+      Promise.all(drawn).then(function () { setTimeout(function () { window.print(); }, 300); });
+      {% endif %}
     })();
   </script>
-  {% endif %}
 </body>
 </html>

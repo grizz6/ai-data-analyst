@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     database_path: str = str(BACKEND_DIR / "data" / "ada.sqlite3")
     session_ttl_minutes: int = 60
     max_sessions: int = 20
+    # Requests allowed per visitor (IP address) per hour; 0 turns a limit off.
+    uploads_per_hour: int = 10
+    questions_per_hour: int = 30
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Language model used only to explain results. Any OpenAI-compatible

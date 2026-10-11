@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/charts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Build Chart */
+        post: operations["build_chart_api_sessions__session_id__charts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/cleaned.csv": {
         parameters: {
             query?: never;
@@ -135,6 +152,8 @@ export interface components {
             categorical_summaries: components["schemas"]["CategoricalSummary"][];
             /** Charts */
             charts: components["schemas"]["ChartSpec"][];
+            /** Chat History */
+            chat_history: components["schemas"]["ChatTurn"][];
             /** Cleaned Preview Rows */
             cleaned_preview_rows: Record<string, unknown>[];
             /** Cleaning Actions */
@@ -191,6 +210,26 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * ChatTurn
+         * @description One question asked about an analysis, and the answer it got.
+         */
+        ChatTurn: {
+            /** Answer */
+            answer: string;
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Model */
+            model: string | null;
+            /** Question */
+            question: string;
+            /**
+             * Source
+             * @default rule_based
+             * @enum {string}
+             */
+            source: "rule_based" | "llm";
+        };
         /** CleaningAction */
         CleaningAction: {
             /** Action */
@@ -239,6 +278,31 @@ export interface components {
             n: number;
             /** P Value */
             p_value: number | null;
+        };
+        /**
+         * CustomChartRequest
+         * @description A chart the user builds: which kind, and which columns go where.
+         *
+         *     histogram: x (numeric). bar: x (category), plus y when aggregating a value.
+         *     scatter: x and y (both numeric). line: x (date or number), plus y when
+         *     aggregating a value. box: y (numeric), optionally split by x (category).
+         */
+        CustomChartRequest: {
+            /**
+             * Aggregate
+             * @default count
+             * @enum {string}
+             */
+            aggregate: "count" | "sum" | "mean" | "median";
+            /**
+             * Chart Type
+             * @enum {string}
+             */
+            chart_type: "histogram" | "bar" | "scatter" | "line" | "box";
+            /** X */
+            x?: string | null;
+            /** Y */
+            y?: string | null;
         };
         /** Explanation */
         Explanation: {
@@ -323,6 +387,8 @@ export interface components {
             configured: boolean;
             /** Fallback Reason */
             fallback_reason: string | null;
+            /** Model */
+            model: string | null;
             /**
              * Source
              * @default rule_based
@@ -485,6 +551,41 @@ export interface operations {
             };
         };
     };
+    build_chart_api_sessions__session_id__charts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomChartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChartSpec"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_cleaned_data_api_sessions__session_id__cleaned_csv_get: {
         parameters: {
             query?: never;
@@ -518,7 +619,10 @@ export interface operations {
     };
     download_report_api_sessions__session_id__report_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Show a print-ready page that opens the print dialog, to save as PDF. */
+                print?: boolean;
+            };
             header?: never;
             path: {
                 session_id: string;

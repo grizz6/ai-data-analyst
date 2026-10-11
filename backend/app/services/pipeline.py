@@ -103,4 +103,5 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
     )
     # utf-8-sig adds the byte-order mark Excel needs to show accented text correctly.
     result._cleaned_csv = cleaned_df.to_csv(index=False).encode("utf-8-sig")
+    result._chart_csv = metrics_df.to_csv(index=False).encode("utf-8")
     return result

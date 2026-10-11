@@ -16,7 +16,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | REST API + interactive docs at `/docs` | Working |
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| Tests and CI | 171 backend tests (pytest) and 24 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
+| Tests and CI | 218 backend tests (pytest) and 31 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
 | Deployment | **Not yet deployed.** Runs locally, or as one Docker container (built and smoke-tested in CI) |
 
@@ -52,6 +52,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations with sample size and p-value, and trends with a fitted slope and p-value |
 | 6 | `charts.py` | Up to 8 Plotly charts: histograms, bar charts for real categories (not mostly-unique text such as names), a scatter of the most correlated pair, a correlation heatmap, a time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), and a box plot with one panel and axis per column |
+| 6b | `custom_charts.py` | Charts the user builds in the "Build your own chart" panel: bar and line totals, averages, or medians per category or time bucket, scatter, histogram, and box plots split by category |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
 | 8 | `explanation.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
 | 9 | `report.py` | Renders `templates/report.html` with Jinja2, charts included |
@@ -138,6 +139,8 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_DATABASE_PATH` | `backend/data/ada.sqlite3` | SQLite file for stored analyses (created on first run; `:memory:` keeps them in memory only) |
 | `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
+| `ADA_UPLOADS_PER_HOUR` | `10` | Uploads one visitor (IP address) may make in any hour; more get a 429 with `Retry-After`. `0` turns the limit off |
+| `ADA_QUESTIONS_PER_HOUR` | `30` | Same for questions, which are what spend the LLM quota. Counts are kept in memory, per process |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
@@ -158,8 +161,9 @@ Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_b
 |--------|------|-------------|
 | `POST` | `/api/upload` | Upload a file and run the full pipeline. For Excel, `?sheet=NAME` picks a sheet; otherwise the first sheet with data is used |
 | `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
-| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set |
-| `GET` | `/api/sessions/{id}/report` | Download the HTML report |
+| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set. Each question and answer is added to the session's `chat_history` (newest 30 kept), and the last 6 are sent with the next question so follow-ups make sense. Numbers in earlier answers don't count as grounded; only the facts and the questions themselves do |
+| `GET` | `/api/sessions/{id}/report` | Download the HTML report. With `?print=true` it is shown in the browser instead, in light colors, and opens the print dialog once the charts are drawn; the app's "Save report as PDF" button uses this, so PDFs need no server-side renderer |
+| `POST` | `/api/sessions/{id}/charts` | Build a chart the user picked: `chart_type` (`bar`, `line`, `scatter`, `histogram`, `box`), columns `x` and `y`, and `aggregate` (`count`, `sum`, `mean`, `median`). Drawn from the prepared data without filled-in gaps or identifier columns; a combination that doesn't fit (a histogram of text, say) gets a 400 saying why |
 | `GET` | `/api/sessions/{id}/cleaned.csv` | Download the full cleaned dataset as CSV (UTF-8 with a byte-order mark so Excel reads accents correctly). Gaps are filled here, as in the cleaned preview |
 | `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
 
@@ -191,7 +195,7 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 ## Known limits
 
 - Results are stored in a local SQLite file, which suits one server; several servers behind a load balancer would need a shared database such as Postgres.
-- Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
+- Not deployed, and there is no authentication. Uploads and questions are rate-limited per IP address, but behind a reverse proxy Uvicorn must be told to trust its forwarded headers (`--proxy-headers --forwarded-allow-ips`), or every visitor shares the proxy's address and one limit.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
 

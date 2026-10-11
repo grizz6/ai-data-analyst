@@ -1,10 +1,11 @@
 import { lazy, Suspense, useState } from "react";
-import { askQuestion, cleanedCsvUrl, reportDownloadUrl } from "../api";
+import { askQuestion, cleanedCsvUrl, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatP } from "../format";
-import type { AnalysisResult } from "../types";
+import type { AnalysisResult, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
+import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
 
 interface Props {
@@ -15,18 +16,30 @@ interface Props {
 
 export default function AnalysisDashboard({ result, loading = false, onAnalyzeSheet }: Props) {
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
+  // Starts from the thread stored with the session, so it survives a reload.
+  const [thread, setThread] = useState<ChatTurn[]>(result.chat_history);
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<"raw" | "cleaned">("cleaned");
 
   const handleAsk = async () => {
-    if (!question.trim()) return;
+    const asked = question.trim();
+    if (!asked || asking) return;
     setAsking(true);
     setAskError(null);
     try {
-      const res = await askQuestion(result.session_id, question);
-      setAnswer(res.answer);
+      const res = await askQuestion(result.session_id, asked);
+      setThread((turns) => [
+        ...turns,
+        {
+          question: asked,
+          answer: res.answer,
+          source: res.source,
+          model: res.model,
+          fallback_reason: res.fallback_reason,
+        },
+      ]);
+      setQuestion("");
     } catch (e) {
       setAskError(e instanceof Error ? e.message : "Failed to get answer");
     } finally {
@@ -94,6 +107,15 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       <div className="actions">
         <a className="btn" href={reportDownloadUrl(result.session_id)} download>
           Download HTML report
+        </a>
+        <a
+          className="btn secondary"
+          href={printableReportUrl(result.session_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Opens the report in a new tab with the print dialog; choose 'Save as PDF'."
+        >
+          Save report as PDF
         </a>
         <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
           Download cleaned data (CSV)
@@ -229,16 +251,52 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       </div>
 
       <div className="panel">
+        <h2>Build your own chart</h2>
+        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
+          Pick a chart type and columns. The server computes every figure from your data as
+          recorded, without the filled-in gaps.
+        </p>
+        <ChartBuilder sessionId={result.session_id} columns={result.columns} />
+      </div>
+
+      <div className="panel">
         <h2>Ask a question</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
           Questions are answered from the pre-computed analysis facts. Free-form answers
-          need an LLM API key on the server; without one you get the key findings.
+          need an LLM API key on the server; without one you get the key findings. Follow-up
+          questions can refer to earlier answers.
         </p>
+        {thread.length > 0 && (
+          <ol className="qa-thread" aria-label="Questions and answers">
+            {thread.map((turn, i) => (
+              <li key={i}>
+                <div className="qa-question">{turn.question}</div>
+                <div className="qa-answer">
+                  {turn.answer}
+                  <div className="qa-source">
+                    {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
         <div className="qa-box">
           <textarea
-            placeholder="e.g. Which region had the highest sales? What trends do you see?"
+            aria-label="Your question"
+            placeholder={
+              thread.length > 0
+                ? "Ask a follow-up…"
+                : "e.g. Which region had the highest sales? What trends do you see?"
+            }
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                void handleAsk();
+              }
+            }}
           />
           <div style={{ marginTop: "0.75rem" }}>
             <button
@@ -251,7 +309,6 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             </button>
           </div>
           {askError && <p className="error-msg">{askError}</p>}
-          {answer && <div className="qa-answer">{answer}</div>}
         </div>
       </div>
 

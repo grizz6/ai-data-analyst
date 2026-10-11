@@ -118,6 +118,30 @@ class ModelAnswer(ApiModel):
     answer: str = Field(min_length=1)
 
 
+class CustomChartRequest(ApiModel):
+    """A chart the user builds: which kind, and which columns go where.
+
+    histogram: x (numeric). bar: x (category), plus y when aggregating a value.
+    scatter: x and y (both numeric). line: x (date or number), plus y when
+    aggregating a value. box: y (numeric), optionally split by x (category).
+    """
+
+    chart_type: Literal["histogram", "bar", "scatter", "line", "box"]
+    x: str | None = None
+    y: str | None = None
+    aggregate: Literal["count", "sum", "mean", "median"] = "count"
+
+
+class ChatTurn(ApiModel):
+    """One question asked about an analysis, and the answer it got."""
+
+    question: str
+    answer: str
+    source: ExplanationSource = "rule_based"
+    model: str | None = None
+    fallback_reason: str | None = None
+
+
 class AnalysisResult(ApiModel):
     session_id: str
     filename: str
@@ -137,14 +161,23 @@ class AnalysisResult(ApiModel):
     explanation: Explanation
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
+    # Questions asked so far, oldest first. Kept with the session, so the thread
+    # survives a reload and earlier answers give follow-up questions context.
+    chat_history: list[ChatTurn] = Field(default_factory=list)
 
     # The full cleaned dataset as CSV, kept with the session for download but
     # left out of the JSON response, which only carries a preview.
     _cleaned_csv: bytes | None = PrivateAttr(default=None)
+    # The prepared data (no filled-in values, no identifier columns) that custom charts are drawn from.
+    _chart_csv: bytes | None = PrivateAttr(default=None)
 
     @property
     def cleaned_csv(self) -> bytes | None:
         return self._cleaned_csv
+
+    @property
+    def chart_csv(self) -> bytes | None:
+        return self._chart_csv
 
 
 class QuestionRequest(ApiModel):
@@ -155,4 +188,5 @@ class QuestionResponse(ApiModel):
     answer: str
     configured: bool = False
     source: ExplanationSource = "rule_based"
+    model: str | None = None
     fallback_reason: str | None = None

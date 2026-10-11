@@ -225,6 +225,7 @@ def test_ask_endpoint_uses_the_model_when_configured(client, sample_csv_bytes, c
         "answer": "Sales and units rise and fall together.",
         "configured": True,
         "source": "llm",
+        "model": "test-model",
         "fallback_reason": None,
     }
     assert client.get("/api/health").json()["llm_configured"] is True

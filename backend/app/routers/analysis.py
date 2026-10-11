@@ -9,17 +9,26 @@ from fastapi.responses import HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
-from app.models.schemas import AnalysisResult, QuestionRequest, QuestionResponse
-from app.services import explanation, report
+from app.models.schemas import (
+    AnalysisResult,
+    ChartSpec,
+    ChatTurn,
+    CustomChartRequest,
+    QuestionRequest,
+    QuestionResponse,
+)
+from app.services import custom_charts, explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
-from app.session_store import get, save
+from app.session_store import add_chat_turn, get, save
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
 READ_CHUNK_BYTES = 1024 * 1024
+# Questions kept per analysis; older ones drop off the start of the thread.
+MAX_CHAT_TURNS = 30
 
 
 def session_or_404(session_id: str) -> AnalysisResult:
@@ -103,14 +112,50 @@ async def ask_question(session_id: str, body: QuestionRequest):
     result = session_or_404(session_id)
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    return await explanation.answer_question(result, body.question.strip())
+    question = body.question.strip()
+    response = await explanation.answer_question(result, question)
+    turn = ChatTurn(
+        question=question[: explanation.MAX_QUESTION_CHARS],
+        answer=response.answer,
+        source=response.source,
+        model=response.model,
+        fallback_reason=response.fallback_reason,
+    )
+    add_chat_turn(session_id, turn, max_turns=MAX_CHAT_TURNS)
+    return response
+
+
+@router.post("/sessions/{session_id}/charts", response_model=ChartSpec)
+async def build_chart(session_id: str, body: CustomChartRequest):
+    result = session_or_404(session_id)
+    if result.chart_csv is None:
+        raise HTTPException(
+            status_code=404, detail="Custom charts aren't available for this analysis; upload the file again."
+        )
+
+    def build() -> ChartSpec:
+        df = custom_charts.load_chart_data(result, result.chart_csv or b"")
+        return custom_charts.build_custom_chart(df, body)
+
+    try:
+        return await run_in_threadpool(build)
+    except custom_charts.ChartRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)
-async def download_report(session_id: str):
+async def download_report(
+    session_id: str,
+    print_view: Annotated[
+        bool,
+        Query(alias="print", description="Show a print-ready page that opens the print dialog, to save as PDF."),
+    ] = False,
+):
     result = session_or_404(session_id)
     # Serializing every chart into the template takes real CPU on big results.
-    html = await run_in_threadpool(report.render_html_report, result)
+    html = await run_in_threadpool(lambda: report.render_html_report(result, for_print=print_view))
+    if print_view:
+        return HTMLResponse(content=html)
     return HTMLResponse(
         content=html,
         headers={
