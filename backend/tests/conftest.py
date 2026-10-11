@@ -11,6 +11,7 @@ os.environ["ADA_FRONTEND_DIST"] = str(Path(__file__).parent / "no-frontend-build
 import pytest
 from fastapi.testclient import TestClient
 
+from app import rate_limit
 from app.config import settings
 from app.main import app
 
@@ -24,6 +25,16 @@ def no_real_llm(monkeypatch):
     Tests that exercise the model layer opt back in with a fake key and a fake transport.
     """
     monkeypatch.setattr(settings, "llm_api_key", "")
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    """Each test starts with no requests counted against the per-hour limits."""
+    rate_limit.uploads.reset()
+    rate_limit.questions.reset()
+    yield
+    rate_limit.uploads.reset()
+    rate_limit.questions.reset()
 
 
 @pytest.fixture

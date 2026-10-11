@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app import rate_limit
 from app.config import settings
 from app.frontend import mount_frontend
 from app.routers import analysis
@@ -27,6 +28,32 @@ async def reject_oversized_uploads(request: Request, call_next):
         if declared and declared.isdigit():
             if int(declared) > settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES:
                 return JSONResponse(status_code=413, content={"detail": analysis.too_large_detail()})
+    return await call_next(request)
+
+
+# Also inside CORS, so a 429 is readable by the browser. Checked before the
+# upload body is read, so a blocked visitor's file never reaches the server.
+@app.middleware("http")
+async def limit_request_rate(request: Request, call_next):
+    if request.method == "POST":
+        path = request.url.path
+        if path == "/api/upload":
+            limiter, limit, what = rate_limit.uploads, settings.uploads_per_hour, "uploads"
+        elif path.startswith("/api/sessions/") and path.endswith("/ask"):
+            limiter, limit, what = rate_limit.questions, settings.questions_per_hour, "questions"
+        else:
+            return await call_next(request)
+        visitor = request.client.host if request.client else "unknown"
+        wait = limiter.check(visitor, limit)
+        if wait is not None:
+            return JSONResponse(
+                status_code=429,
+                headers={"Retry-After": rate_limit.retry_after_header(wait)},
+                content={
+                    "detail": f"Too many {what}: the limit is {limit} per hour. "
+                    f"Try again in {rate_limit.describe_wait(wait)}."
+                },
+            )
     return await call_next(request)
 
 

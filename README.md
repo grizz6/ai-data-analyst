@@ -138,6 +138,8 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_DATABASE_PATH` | `backend/data/ada.sqlite3` | SQLite file for stored analyses (created on first run; `:memory:` keeps them in memory only) |
 | `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
+| `ADA_UPLOADS_PER_HOUR` | `10` | Uploads one visitor (IP address) may make in any hour; more get a 429 with `Retry-After`. `0` turns the limit off |
+| `ADA_QUESTIONS_PER_HOUR` | `30` | Same for questions, which are what spend the LLM quota. Counts are kept in memory, per process |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
@@ -191,7 +193,7 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 ## Known limits
 
 - Results are stored in a local SQLite file, which suits one server; several servers behind a load balancer would need a shared database such as Postgres.
-- Not deployed; no authentication or rate limiting, so it is not safe to expose publicly as is.
+- Not deployed, and there is no authentication. Uploads and questions are rate-limited per IP address, but behind a reverse proxy Uvicorn must be told to trust its forwarded headers (`--proxy-headers --forwarded-allow-ips`), or every visitor shares the proxy's address and one limit.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
 
