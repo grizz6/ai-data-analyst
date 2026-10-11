@@ -203,6 +203,13 @@ class StatisticalTests(ApiModel):
     missing_patterns: list[MissingPattern] = Field(default_factory=list)
 
 
+class TimeAxisInfo(ApiModel):
+    # "dates", "date_parts", "epoch", "year", "step_column" or "row_order"
+    kind: str
+    columns: list[str]
+    label: str
+
+
 class ForecastPoint(ApiModel):
     date: str
     value: float
@@ -323,6 +330,7 @@ class AnalysisResult(ApiModel):
     charts: list[ChartSpec]
     explanation: Explanation
     statistics: StatisticalTests = Field(default_factory=StatisticalTests)
+    time_axis: TimeAxisInfo | None = None
     time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
     clustering: ClusterAnalysis | None = None
     preview_rows: list[dict[str, Any]]

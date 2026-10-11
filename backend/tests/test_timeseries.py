@@ -19,7 +19,7 @@ def test_weekly_cycle_in_daily_data_is_found_and_forecast():
     assert ts.seasonal_strength > 0.8
     assert ts.forecast_method.startswith("Holt-Winters")
     assert len(ts.forecast) == 7
-    assert [c.id for c in ts.charts] == ["ts_v", "ts_decomp_v"]
+    assert [c.id for c in ts.charts] == ["ts_v", "ts_acf_v", "ts_decomp_v"]
     assert "strong repeating pattern every 7 periods" in ts.summary
 
 

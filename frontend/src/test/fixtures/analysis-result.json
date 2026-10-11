@@ -498,9 +498,18 @@
             "data": [],
             "layout": {}
           }
+        },
+        {
+          "id": "ts_acf_sales",
+          "title": "sales: autocorrelation",
+          "chart_type": "bar",
+          "plotly_json": {
+            "data": [],
+            "layout": {}
+          }
         }
       ],
-      "summary": "'sales' was averaged into 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 8,896.56 by 2025-03-01 (roughly 4,831.36 to 12,961.76)."
+      "summary": "'sales' over date: 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 8,896.56 by 2025-03-01 (roughly 4,831.36 to 12,961.76)."
     },
     {
       "column": "units",
@@ -547,9 +556,18 @@
             "data": [],
             "layout": {}
           }
+        },
+        {
+          "id": "ts_acf_units",
+          "title": "units: autocorrelation",
+          "chart_type": "bar",
+          "plotly_json": {
+            "data": [],
+            "layout": {}
+          }
         }
       ],
-      "summary": "'units' was averaged into 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 84.69 by 2025-03-01 (roughly 45.50 to 123.89)."
+      "summary": "'units' over date: 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 84.69 by 2025-03-01 (roughly 45.50 to 123.89)."
     }
   ],
   "clustering": {
@@ -625,5 +643,12 @@
       }
     },
     "summary": "The rows fall into 3 groups (silhouette 0.87). The largest, 60 rows, stands out for units high, sales low. The first two principal components capture 100% of the variation."
+  },
+  "time_axis": {
+    "kind": "dates",
+    "columns": [
+      "date"
+    ],
+    "label": "date"
   }
 }

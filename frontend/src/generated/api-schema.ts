@@ -241,6 +241,7 @@ export interface components {
             /** Sheet Name */
             sheet_name: string | null;
             statistics: components["schemas"]["StatisticalTests"];
+            time_axis: components["schemas"]["TimeAxisInfo"] | null;
             /** Time Series */
             time_series: components["schemas"]["TimeSeriesAnalysis"][];
             /** Trends */
@@ -685,6 +686,15 @@ export interface components {
             missing_patterns: components["schemas"]["MissingPattern"][];
             /** Rank Correlations */
             rank_correlations: components["schemas"]["RankCorrelation"][];
+        };
+        /** TimeAxisInfo */
+        TimeAxisInfo: {
+            /** Columns */
+            columns: string[];
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
         };
         /** TimeSeriesAnalysis */
         TimeSeriesAnalysis: {

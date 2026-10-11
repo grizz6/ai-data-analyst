@@ -2,7 +2,7 @@ import uuid
 
 from starlette.concurrency import run_in_threadpool
 
-from app.models.schemas import AnalysisResult, Explanation, RuleInsight
+from app.models.schemas import AnalysisResult, Explanation, RuleInsight, TimeAxisInfo
 from app.services import (
     analysis,
     charts,
@@ -15,6 +15,7 @@ from app.services import (
     quality,
     semantics,
     statistics,
+    timeaxis,
     timeseries,
 )
 from app.services.ingestion import df_preview_records
@@ -55,7 +56,10 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     trends = analysis.detect_trends(metrics_df)
     chart_specs = charts.build_charts(metrics_df)
     statistical_tests = statistics.compute_statistics(metrics_df)
-    time_series = timeseries.analyze_time_series(metrics_df)
+    # Found on the prepared data, where date parts and timestamps still are; identifier
+    # columns (a step counter, say) can order the rows even though they aren't analyzed.
+    axis = timeaxis.find_time_axis(prepared_df)
+    time_series = timeseries.analyze_time_series(metrics_df, axis) if axis else []
     clustering = ml.cluster(metrics_df)
     rule_insights = insights.generate_rule_insights(
         prepared_df,
@@ -124,6 +128,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         rule_insights=rule_insights,
         charts=chart_specs,
         statistics=statistical_tests,
+        time_axis=TimeAxisInfo(kind=axis.kind, columns=axis.columns, label=axis.label) if axis else None,
         time_series=time_series,
         clustering=clustering,
         explanation=empty_explanation,

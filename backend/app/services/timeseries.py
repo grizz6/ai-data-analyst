@@ -18,6 +18,7 @@ from plotly.subplots import make_subplots
 
 from app.models.schemas import ChartSpec, ForecastPoint, TimeSeriesAnalysis
 from app.services.analysis import format_p
+from app.services.timeaxis import TimeAxis, find_time_axis
 from app.utils.json_compat import plotly_figure_to_dict
 
 MAX_SERIES = 3
@@ -38,15 +39,21 @@ FREQUENCIES = [
 ]
 
 
-def analyze_time_series(df: pd.DataFrame) -> list[TimeSeriesAnalysis]:
-    date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
-    numeric = [c for c in df.select_dtypes(include="number").columns if not pd.api.types.is_bool_dtype(df[c])]
-    if not date_cols or not numeric:
+def analyze_time_series(df: pd.DataFrame, axis: TimeAxis | None = None) -> list[TimeSeriesAnalysis]:
+    """Analyze up to MAX_SERIES numeric columns along the file's time axis (see timeaxis.py)."""
+    if axis is None:
+        axis = find_time_axis(df)
+    if axis is None:
         return []
-    date_col = date_cols[0]
+    numeric = [
+        c
+        for c in df.select_dtypes(include="number").columns
+        if not pd.api.types.is_bool_dtype(df[c]) and str(c) not in axis.columns and df[c].nunique() > 1
+    ]
     results = []
     for col in numeric[:MAX_SERIES]:
-        analysis = _analyze(df[[date_col, col]].dropna(), str(date_col), str(col))
+        frame = pd.DataFrame({"t": axis.values, "v": df[col]}).dropna()
+        analysis = (_analyze_calendar if axis.is_calendar else _analyze_steps)(frame, axis.label, str(col))
         if analysis is not None:
             results.append(analysis)
     return results
@@ -65,33 +72,65 @@ def _choose_frequency(dates: pd.Series) -> tuple[str, str, int | None, int]:
     return freq, label, season, window
 
 
-def _analyze(frame: pd.DataFrame, date_col: str, col: str) -> TimeSeriesAnalysis | None:
-    if frame[date_col].nunique() < MIN_POINTS:
+def _analyze_calendar(frame: pd.DataFrame, axis_label: str, col: str) -> TimeSeriesAnalysis | None:
+    if frame["t"].nunique() < MIN_POINTS:
         return None
-    freq, label, season, window = _choose_frequency(frame[date_col])
-    raw = frame.set_index(date_col)[col].astype(float).resample(freq).mean()
+    freq, label, season, window = _choose_frequency(frame["t"])
+    raw = frame.set_index("t")["v"].astype(float).resample(freq).mean()
     if raw.notna().sum() < MIN_POINTS:
         return None
     filled_gaps = int(raw.isna().sum())
     series = raw.interpolate(limit_direction="both")
     if series.nunique() < 2:
         return None
-
-    adf_stat, adf_p = _adf(series)
-    lag, lag_acf = _strongest_lag(series, season)
     seasonal_period = season if season and len(series) >= 2 * season else None
+
+    def future(horizon: int) -> list[str]:
+        return [d.date().isoformat() for d in pd.date_range(series.index[-1], periods=horizon + 1, freq=freq)[1:]]
+
+    return _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps, future)
+
+
+def _analyze_steps(frame: pd.DataFrame, axis_label: str, col: str) -> TimeSeriesAnalysis | None:
+    """A sequence without calendar dates: a step column, or the rows in file order."""
+    series = frame.groupby("t")["v"].mean().astype(float)  # sorted by step, repeats averaged
+    label = "step"
+    if len(series) > MAX_POINTS:
+        size = math.ceil(len(series) / MAX_POINTS)
+        bucket = np.arange(len(series)) // size
+        starts = pd.Series(series.index.to_numpy()).groupby(bucket).first().to_numpy()
+        series = pd.Series(series.to_numpy()).groupby(bucket).mean()
+        series.index = pd.Index(starts)
+        label = f"{size}-step"
+    if len(series) < MIN_POINTS or series.nunique() < 2:
+        return None
+    # Without a calendar, a repeating pattern is read from the autocorrelation itself.
+    seasonal_period = _repeat_length(series)
+    window = max(3, min(20, len(series) // 20))
+    step = float(np.median(np.diff(series.index.to_numpy(dtype=float)))) or 1.0
+    last = float(series.index[-1])
+
+    def future(horizon: int) -> list[str]:
+        return [f"{last + h * step:g}" for h in range(1, horizon + 1)]
+
+    return _finish(series, col, axis_label, label, window, seasonal_period, 0, future)
+
+
+def _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps, future) -> TimeSeriesAnalysis:
+    adf_stat, adf_p = _adf(series)
+    lag, lag_acf = _strongest_lag(series, seasonal_period)
     seasonal_strength, trend_strength, decomposition = _decompose(series, seasonal_period)
     horizon = max(1, min(seasonal_period or 6, len(series) // 4, 12))
-    method, forecast = _forecast(series, seasonal_period, horizon, freq)
+    method, forecast = _forecast(series, seasonal_period, horizon, future(horizon))
 
     rolling = series.rolling(window, min_periods=1).mean()
-    charts = [_forecast_chart(series, rolling, window, forecast, col, label)]
+    charts = [_forecast_chart(series, rolling, window, forecast, col, label, axis_label), _acf_chart(series, col)]
     if decomposition is not None:
         charts.append(_decomposition_chart(decomposition, col))
 
     analysis = TimeSeriesAnalysis(
         column=col,
-        date_column=date_col,
+        date_column=axis_label,
         frequency=label,
         points=len(series),
         filled_gaps=filled_gaps,
@@ -148,6 +187,26 @@ def _strongest_lag(series: pd.Series, season: int | None) -> tuple[int | None, f
     return lag, round(value, 4)
 
 
+def _repeat_length(series: pd.Series) -> int | None:
+    """The lag of the highest positive autocorrelation peak, if it's clear (0.3+) and seen twice."""
+    from statsmodels.tsa.stattools import acf
+
+    max_lag = min(len(series) // 2, 60)
+    if max_lag < 3:
+        return None
+    values = acf(series.to_numpy(), nlags=max_lag, fft=True)
+    # A peak, not just a high value: a slow trend keeps every early lag high.
+    peaks = [
+        lag
+        for lag in range(2, max_lag)
+        if values[lag] >= 0.3 and values[lag] > values[lag - 1] and values[lag] >= values[lag + 1]
+    ]
+    if not peaks:
+        return None
+    best = max(peaks, key=lambda lag: values[lag])
+    return best if len(series) >= 2 * best else None
+
+
 def _decompose(series: pd.Series, period: int | None):
     """Seasonal and trend strength (Hyndman's measures, 0 to 1) and the components for a chart."""
     if period is None:
@@ -161,7 +220,9 @@ def _decompose(series: pd.Series, period: int | None):
     return round(float(seasonal_strength), 4), round(float(trend_strength), 4), parts
 
 
-def _forecast(series: pd.Series, period: int | None, horizon: int, freq: str) -> tuple[str, list[ForecastPoint]]:
+def _forecast(
+    series: pd.Series, period: int | None, horizon: int, labels: list[str]
+) -> tuple[str, list[ForecastPoint]]:
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
     seasonal = "add" if period else None
@@ -176,21 +237,21 @@ def _forecast(series: pd.Series, period: int | None, horizon: int, freq: str) ->
     except (ValueError, np.linalg.LinAlgError):
         return "not enough data to forecast", []
     sigma = float(np.std(series.to_numpy() - fit.fittedvalues, ddof=1))
-    dates = pd.date_range(series.index[-1], periods=horizon + 1, freq=freq)[1:]
     return method, [
         ForecastPoint(
-            date=d.date().isoformat(),
+            date=d,
             value=round(float(v), 4),
             lower=round(float(v - Z_95 * sigma * math.sqrt(h)), 4),
             upper=round(float(v + Z_95 * sigma * math.sqrt(h)), 4),
         )
-        for h, (d, v) in enumerate(zip(dates, values, strict=True), start=1)
+        for h, (d, v) in enumerate(zip(labels, values, strict=True), start=1)
     ]
 
 
-def _forecast_chart(series, rolling, window, forecast, col, label) -> ChartSpec:
+def _forecast_chart(series, rolling, window, forecast, col, label, axis_label) -> ChartSpec:
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=series.index, y=series.values, name=f"{label} average", mode="lines+markers"))
+    markers = "lines+markers" if len(series) <= 120 else "lines"
+    fig.add_trace(go.Scatter(x=series.index, y=series.values, name=f"{label} average", mode=markers))
     fig.add_trace(go.Scatter(x=rolling.index, y=rolling.values, name=f"{window}-period rolling mean", mode="lines"))
     if forecast:
         xs = [p.date for p in forecast]
@@ -213,9 +274,27 @@ def _forecast_chart(series, rolling, window, forecast, col, label) -> ChartSpec:
         fig.add_trace(
             go.Scatter(x=xs, y=[p.value for p in forecast], name="forecast", mode="lines", line={"dash": "dash"})
         )
-    fig.update_layout(title=f"{col}: history and forecast", legend={"orientation": "h"})
+    fig.update_layout(title=f"{col}: history and forecast", legend={"orientation": "h"}, xaxis_title=axis_label)
     return ChartSpec(
         id=f"ts_{col}", title=f"{col}: history and forecast", chart_type="line", plotly_json=plotly_figure_to_dict(fig)
+    )
+
+
+def _acf_chart(series: pd.Series, col: str) -> ChartSpec:
+    from statsmodels.tsa.stattools import acf
+
+    max_lag = max(1, min(len(series) // 2 - 1, 40))
+    values = acf(series.to_numpy(), nlags=max_lag, fft=True)[1:]
+    band = Z_95 / math.sqrt(len(series))
+    lags = list(range(1, max_lag + 1))
+    fig = go.Figure(go.Bar(x=lags, y=values, name="autocorrelation"))
+    for y in (band, -band):
+        fig.add_hline(y=y, line_dash="dot", line_width=1)
+    fig.update_layout(
+        title=f"{col}: autocorrelation by lag", xaxis_title="lag (periods)", yaxis_title="ACF", showlegend=False
+    )
+    return ChartSpec(
+        id=f"ts_acf_{col}", title=f"{col}: autocorrelation", chart_type="bar", plotly_json=plotly_figure_to_dict(fig)
     )
 
 
@@ -233,7 +312,8 @@ def _decomposition_chart(parts, col: str) -> ChartSpec:
 
 
 def _summary(a: TimeSeriesAnalysis) -> str:
-    parts = [f"'{a.column}' was averaged into {a.points} {a.frequency} periods"]
+    unit = "periods" if a.frequency not in ("step",) and not a.frequency.endswith("-step") else "steps"
+    parts = [f"'{a.column}' over {a.date_column}: {a.points} {a.frequency} {unit}"]
     if a.filled_gaps:
         parts[-1] += f" ({a.filled_gaps} without data were filled in between neighbours for these tests)"
     parts[-1] += "."
