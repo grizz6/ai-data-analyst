@@ -8,6 +8,7 @@ const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
 import StatisticsPanel from "./StatisticsPanel";
+import TimeSeriesPanel from "./TimeSeriesPanel";
 
 /** A few questions this file can answer, built from its own columns. */
 export function suggestedQuestions(result: AnalysisResult): string[] {
@@ -109,6 +110,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     ["insights", "Insights"],
     ...(result.numeric_summaries.length > 0 ? [["statistics", "Statistics"] as [string, string]] : []),
     ["tests", "Tests"],
+    ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [string, string]] : []),
     ["charts", "Charts"],
     ["chart-builder", "Build a chart"],
     ["ask", "Ask"],
@@ -350,6 +352,13 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <h2>Statistical tests</h2>
         <StatisticsPanel tests={result.statistics} />
       </div>
+
+      {result.time_series.length > 0 && (
+        <div id="time-series" className="panel">
+          <h2>Time series</h2>
+          <TimeSeriesPanel series={result.time_series} />
+        </div>
+      )}
 
       <div id="charts" className="panel">
         <h2>Visualizations</h2>

@@ -118,6 +118,16 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
         "correlations": [p.model_dump() for p in result.correlations],
         "trends": [t.model_dump() for t in result.trends],
         "findings": [i.message for i in result.rule_insights],
+        "time_series": [
+            {
+                "column": t.column,
+                "frequency": t.frequency,
+                "periods": t.points,
+                "summary": t.summary,
+                "forecast_end": t.forecast[-1].model_dump() if t.forecast else None,
+            }
+            for t in result.time_series
+        ],
         "statistical_tests": {
             "distributions": [
                 {

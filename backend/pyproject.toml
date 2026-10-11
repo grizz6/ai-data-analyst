@@ -22,5 +22,5 @@ check_untyped_defs = true
 
 # No type information published for these.
 [[tool.mypy.overrides]]
-module = ["plotly.*", "scipy.*", "xlrd.*"]
+module = ["plotly.*", "scipy.*", "xlrd.*", "statsmodels.*", "sklearn.*"]
 ignore_missing_imports = true

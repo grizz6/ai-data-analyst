@@ -451,5 +451,105 @@
       }
     ],
     "missing_patterns": []
-  }
+  },
+  "time_series": [
+    {
+      "column": "sales",
+      "date_column": "date",
+      "frequency": "monthly",
+      "points": 12,
+      "filled_gaps": 0,
+      "rolling_window": 3,
+      "adf_statistic": null,
+      "adf_p": null,
+      "stationary": null,
+      "strongest_lag": null,
+      "strongest_lag_acf": null,
+      "seasonal_period": null,
+      "seasonal_strength": null,
+      "trend_strength": null,
+      "forecast_method": "Holt's linear trend",
+      "forecast": [
+        {
+          "date": "2025-01-01",
+          "value": 8934.6582,
+          "lower": 6587.6123,
+          "upper": 11281.704
+        },
+        {
+          "date": "2025-02-01",
+          "value": 8913.4932,
+          "lower": 5594.2691,
+          "upper": 12232.7173
+        },
+        {
+          "date": "2025-03-01",
+          "value": 8896.5612,
+          "lower": 4831.3585,
+          "upper": 12961.7639
+        }
+      ],
+      "charts": [
+        {
+          "id": "ts_sales",
+          "title": "sales: history and forecast",
+          "chart_type": "line",
+          "plotly_json": {
+            "data": [],
+            "layout": {}
+          }
+        }
+      ],
+      "summary": "'sales' was averaged into 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 8,896.56 by 2025-03-01 (roughly 4,831.36 to 12,961.76)."
+    },
+    {
+      "column": "units",
+      "date_column": "date",
+      "frequency": "monthly",
+      "points": 12,
+      "filled_gaps": 0,
+      "rolling_window": 3,
+      "adf_statistic": null,
+      "adf_p": null,
+      "stationary": null,
+      "strongest_lag": null,
+      "strongest_lag_acf": null,
+      "seasonal_period": null,
+      "seasonal_strength": null,
+      "trend_strength": null,
+      "forecast_method": "Holt's linear trend",
+      "forecast": [
+        {
+          "date": "2025-01-01",
+          "value": 87.4896,
+          "lower": 64.861,
+          "upper": 110.1181
+        },
+        {
+          "date": "2025-02-01",
+          "value": 86.0875,
+          "lower": 54.0859,
+          "upper": 118.0892
+        },
+        {
+          "date": "2025-03-01",
+          "value": 84.6925,
+          "lower": 45.4987,
+          "upper": 123.8864
+        }
+      ],
+      "charts": [
+        {
+          "id": "ts_units",
+          "title": "units: history and forecast",
+          "chart_type": "line",
+          "plotly_json": {
+            "data": [],
+            "layout": {}
+          }
+        }
+      ],
+      "summary": "'units' was averaged into 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 84.69 by 2025-03-01 (roughly 45.50 to 123.89)."
+    }
+  ]
 }

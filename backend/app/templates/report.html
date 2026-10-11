@@ -183,11 +183,21 @@
   </section>
   {% endif %}
 
-  {% if result.charts %}
+  {% if result.time_series %}
+  <section>
+    <h2>Time series</h2>
+    {% for ts in result.time_series %}
+    <p><strong>{{ ts.column }}</strong> over {{ ts.date_column }}: {{ ts.summary }}</p>
+    {% endfor %}
+    <p class="note">Forecast ranges are approximate 95% bands from the model's past errors; the charts below include them.</p>
+  </section>
+  {% endif %}
+
+  {% if charts %}
   <section>
     <h2>Charts</h2>
     <div class="chart-grid">
-      {% for chart in result.charts %}
+      {% for chart in charts %}
       <div class="chart-card">
         <h3>{{ chart.title }}</h3>
         <div class="chart" id="chart-{{ loop.index }}"></div>
@@ -226,14 +236,14 @@
     </p>
   </section>
 
-  {% if result.charts %}
+  {% if charts %}
   <script src="{{ plotly_src }}" charset="utf-8"></script>
   {% endif %}
   <script{% if nonce %} nonce="{{ nonce }}"{% endif %}>
     (function () {
       var drawn = [];
-      {% if result.charts %}
-      var charts = {{ result.charts | map(attribute="plotly_json") | list | tojson }};
+      {% if charts %}
+      var charts = {{ charts | map(attribute="plotly_json") | list | tojson }};
       charts.forEach(function (fig, i) {
         var layout = Object.assign({}, fig.layout || {}, {
           paper_bgcolor: "transparent",

@@ -123,7 +123,8 @@ describe("AnalysisDashboard", () => {
 
   it("loads the charts lazily", async () => {
     render(<AnalysisDashboard result={sampleResult()} />);
-    expect(await screen.findByTestId("chart-grid")).toHaveTextContent("2 charts");
+    const charts = document.getElementById("charts") as HTMLElement;
+    expect(await within(charts).findByTestId("chart-grid")).toHaveTextContent("2 charts");
   });
 
   it("asks a question and shows the answer", async () => {

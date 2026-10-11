@@ -768,3 +768,37 @@ html {
   background: rgba(52, 211, 153, 0.15);
   color: var(--success);
 }
+
+.ts-block + .ts-block {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.fact {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fact-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.fact-value {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

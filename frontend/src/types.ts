@@ -23,6 +23,7 @@ export type QualityIssue = Schemas["QualityIssue"];
 export type QuestionResponse = Schemas["QuestionResponse"];
 export type RuleInsight = Schemas["RuleInsight"];
 export type StatisticalTests = Schemas["StatisticalTests"];
+export type TimeSeriesAnalysis = Schemas["TimeSeriesAnalysis"];
 export type TrendInsight = Schemas["TrendInsight"];
 
 export type ExplanationSource = Explanation["source"];

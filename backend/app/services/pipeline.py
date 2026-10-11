@@ -14,6 +14,7 @@ from app.services import (
     quality,
     semantics,
     statistics,
+    timeseries,
 )
 from app.services.ingestion import df_preview_records
 from app.workload import run_in_slot
@@ -53,6 +54,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     trends = analysis.detect_trends(metrics_df)
     chart_specs = charts.build_charts(metrics_df)
     statistical_tests = statistics.compute_statistics(metrics_df)
+    time_series = timeseries.analyze_time_series(metrics_df)
     rule_insights = insights.generate_rule_insights(
         prepared_df,
         quality_issues,
@@ -120,6 +122,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         rule_insights=rule_insights,
         charts=chart_specs,
         statistics=statistical_tests,
+        time_series=time_series,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

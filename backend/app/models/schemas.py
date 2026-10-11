@@ -203,6 +203,39 @@ class StatisticalTests(ApiModel):
     missing_patterns: list[MissingPattern] = Field(default_factory=list)
 
 
+class ForecastPoint(ApiModel):
+    date: str
+    value: float
+    lower: float
+    upper: float
+
+
+class TimeSeriesAnalysis(ApiModel):
+    column: str
+    date_column: str
+    # How the values were grouped in time ("daily", "weekly", "monthly", ...) and averaged.
+    frequency: str
+    points: int
+    # Periods with no data, filled by straight-line interpolation for these tests only.
+    filled_gaps: int
+    rolling_window: int
+    # Augmented Dickey-Fuller test, H0: the series has a unit root (is not stationary).
+    adf_statistic: float | None
+    adf_p: float | None
+    stationary: bool | None
+    # The lag (in periods) with the strongest autocorrelation beyond chance, if any.
+    strongest_lag: int | None
+    strongest_lag_acf: float | None
+    seasonal_period: int | None
+    # 0 to 1: how much of the variation the repeating seasonal pattern accounts for.
+    seasonal_strength: float | None
+    trend_strength: float | None
+    forecast_method: str
+    forecast: list[ForecastPoint] = Field(default_factory=list)
+    charts: list[ChartSpec] = Field(default_factory=list)
+    summary: str
+
+
 class ChatTurn(ApiModel):
     """One question asked about an analysis, and the answer it got."""
 
@@ -235,6 +268,7 @@ class AnalysisResult(ApiModel):
     charts: list[ChartSpec]
     explanation: Explanation
     statistics: StatisticalTests = Field(default_factory=StatisticalTests)
+    time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
     # Questions asked so far, oldest first. Kept with the session, so the thread

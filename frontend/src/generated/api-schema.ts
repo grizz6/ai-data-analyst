@@ -220,6 +220,8 @@ export interface components {
             /** Sheet Name */
             sheet_name: string | null;
             statistics: components["schemas"]["StatisticalTests"];
+            /** Time Series */
+            time_series: components["schemas"]["TimeSeriesAnalysis"][];
             /** Trends */
             trends: components["schemas"]["TrendInsight"][];
         };
@@ -410,6 +412,17 @@ export interface components {
              */
             source: "rule_based" | "llm";
         };
+        /** ForecastPoint */
+        ForecastPoint: {
+            /** Date */
+            date: string;
+            /** Lower */
+            lower: number;
+            /** Upper */
+            upper: number;
+            /** Value */
+            value: number;
+        };
         /** GroupDifference */
         GroupDifference: {
             /** Anova F */
@@ -563,6 +576,45 @@ export interface components {
             missing_patterns: components["schemas"]["MissingPattern"][];
             /** Rank Correlations */
             rank_correlations: components["schemas"]["RankCorrelation"][];
+        };
+        /** TimeSeriesAnalysis */
+        TimeSeriesAnalysis: {
+            /** Adf P */
+            adf_p: number | null;
+            /** Adf Statistic */
+            adf_statistic: number | null;
+            /** Charts */
+            charts: components["schemas"]["ChartSpec"][];
+            /** Column */
+            column: string;
+            /** Date Column */
+            date_column: string;
+            /** Filled Gaps */
+            filled_gaps: number;
+            /** Forecast */
+            forecast: components["schemas"]["ForecastPoint"][];
+            /** Forecast Method */
+            forecast_method: string;
+            /** Frequency */
+            frequency: string;
+            /** Points */
+            points: number;
+            /** Rolling Window */
+            rolling_window: number;
+            /** Seasonal Period */
+            seasonal_period: number | null;
+            /** Seasonal Strength */
+            seasonal_strength: number | null;
+            /** Stationary */
+            stationary: boolean | null;
+            /** Strongest Lag */
+            strongest_lag: number | null;
+            /** Strongest Lag Acf */
+            strongest_lag_acf: number | null;
+            /** Summary */
+            summary: string;
+            /** Trend Strength */
+            trend_strength: number | null;
         };
         /** TrendInsight */
         TrendInsight: {
