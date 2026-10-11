@@ -13,6 +13,16 @@ export async function uploadDataset(file: File, sheet?: string): Promise<Analysi
   return res.json();
 }
 
+/** A stored analysis, for reopening it. Throws with the server's message if it has expired. */
+export async function getSession(sessionId: string): Promise<AnalysisResult> {
+  const res = await fetch(`/api/sessions/${sessionId}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Couldn't open that analysis");
+  }
+  return res.json();
+}
+
 export async function askQuestion(
   sessionId: string,
   question: string

@@ -17,8 +17,7 @@ describe("AnalysisDashboard", () => {
   it("labels a rule-based summary and says why", () => {
     render(<AnalysisDashboard result={sampleResult()} />);
 
-    expect(screen.getByRole("heading", { name: "Summary (rule-based)" })).toBeInTheDocument();
-    expect(screen.getByText(/no LLM API key is set on the server/)).toBeInTheDocument();
+    expect(within(panel(/^Summary$/)).getByText(/^Rule-based summary\. Set an LLM API key/)).toBeInTheDocument();
   });
 
   it("names the model when a language model wrote the summary", () => {
@@ -27,7 +26,7 @@ describe("AnalysisDashboard", () => {
 
     render(<AnalysisDashboard result={result} />);
 
-    expect(screen.getByRole("heading", { name: "Summary (written by llama-3.3-70b-versatile)" })).toBeInTheDocument();
+    expect(within(panel(/^Summary$/)).getByText(/^Written by llama-3\.3-70b-versatile/)).toBeInTheDocument();
   });
 
   it("explains a fallback when the model's text was rejected", () => {
@@ -43,6 +42,42 @@ describe("AnalysisDashboard", () => {
     expect(screen.getByText(/model wrote numbers not in the analysis: 37/)).toBeInTheDocument();
   });
 
+  it("shows the file name, size, and readable statistics", () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "sales_sample.csv" })).toBeInTheDocument();
+    expect(screen.getByText(/31 rows · 5 columns/)).toBeInTheDocument();
+    const sales = within(panel(/Numeric statistics/)).getByText("sales").closest("tr") as HTMLElement;
+    expect(within(sales).getByText("9,419.35")).toBeInTheDocument();
+    const date = within(panel(/Column profiles/)).getByText("date").closest("tr") as HTMLElement;
+    expect(within(date).getByText("Date")).toBeInTheDocument();
+  });
+
+  it("opens a collapsed section when its jump link is used", async () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+    const columns = document.getElementById("columns") as HTMLDetailsElement;
+    expect(columns.open).toBe(false);
+
+    await userEvent.click(screen.getByRole("link", { name: "Columns" }));
+    expect(columns.open).toBe(true);
+  });
+
+  it("sends a question with Enter, but Shift+Enter starts a new line", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ answer: "Ok.", configured: false, source: "rule_based", model: null, fallback_reason: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AnalysisDashboard result={sampleResult()} />);
+
+    const box = screen.getByRole("textbox", { name: "Your question" });
+    await userEvent.type(box, "First line{Shift>}{Enter}{/Shift}second");
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.type(box, "{Enter}");
+
+    expect(await screen.findByText("Ok.")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ question: "First line\nsecond" });
+  });
+
   it("shows each correlation with its sample size and p-value", () => {
     render(<AnalysisDashboard result={sampleResult()} />);
     expect(within(panel(/Correlations/)).getByText(/n = 31, p < 0.001/)).toBeInTheDocument();
@@ -52,11 +87,11 @@ describe("AnalysisDashboard", () => {
     const result = sampleResult();
     render(<AnalysisDashboard result={result} />);
 
-    expect(screen.getByRole("link", { name: "Download HTML report" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Download report" })).toHaveAttribute(
       "href",
       `/api/sessions/${result.session_id}/report`,
     );
-    expect(screen.getByRole("link", { name: "Download cleaned data (CSV)" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Cleaned CSV" })).toHaveAttribute(
       "href",
       `/api/sessions/${result.session_id}/cleaned.csv`,
     );
@@ -66,7 +101,7 @@ describe("AnalysisDashboard", () => {
     const result = sampleResult();
     render(<AnalysisDashboard result={result} />);
 
-    const link = screen.getByRole("link", { name: "Save report as PDF" });
+    const link = screen.getByRole("link", { name: "Save as PDF" });
     expect(link).toHaveAttribute("href", `/api/sessions/${result.session_id}/report?print=true`);
     expect(link).toHaveAttribute("target", "_blank");
   });

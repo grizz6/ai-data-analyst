@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { askQuestion, cleanedCsvUrl, printableReportUrl, reportDownloadUrl } from "../api";
-import { formatP } from "../format";
+import { formatNumber, formatP, friendlyType } from "../format";
 import type { AnalysisResult, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
@@ -20,6 +20,28 @@ export function suggestedQuestions(result: AnalysisResult): string[] {
   if (trend) questions.push(`How is ${trend.column} changing over time?`);
   questions.push("What should I look into first?");
   return questions;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!navigator.clipboard) return null;
+  return (
+    <button
+      type="button"
+      className="link-btn small"
+      onClick={() =>
+        navigator.clipboard.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          },
+          () => {},
+        )
+      }
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
 }
 
 interface Props {
@@ -77,50 +99,67 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
   return (
     <>
-      <div className="banner">
-        <strong>Session:</strong> {result.session_id.slice(0, 8)}… ·{" "}
-        <strong>File:</strong> {result.filename}
-        {result.sheet_name && (
-          <>
-            {" "}· <strong>Sheet:</strong>{" "}
-            {result.available_sheets.length > 1 && onAnalyzeSheet ? (
-              <select
-                className="sheet-select"
-                value={result.sheet_name}
-                disabled={loading}
-                onChange={(e) => onAnalyzeSheet(e.target.value)}
-              >
-                {result.available_sheets.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              result.sheet_name
-            )}
-          </>
-        )}
-        {!result.explanation.configured && (
-          <> · Summaries are rule-based because no LLM API key is set on the server.</>
-        )}
-        {result.explanation.configured && result.explanation.fallback_reason && (
-          <> · The language model's summary wasn't used ({result.explanation.fallback_reason}), so it is rule-based.</>
-        )}
+      <div className="file-card">
+        <div className="file-main">
+          <span className="file-icon" aria-hidden="true">
+            ▤
+          </span>
+          <div>
+            <h1 className="file-name">{result.filename}</h1>
+            <p className="muted small">
+              {result.row_count.toLocaleString()} rows · {result.column_count} columns
+              {result.sheet_name && (
+                <>
+                  {" "}· Sheet{" "}
+                  {result.available_sheets.length > 1 && onAnalyzeSheet ? (
+                    <select
+                      className="sheet-select"
+                      aria-label="Sheet"
+                      value={result.sheet_name}
+                      disabled={loading}
+                      onChange={(e) => onAnalyzeSheet(e.target.value)}
+                    >
+                      {result.available_sheets.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    result.sheet_name
+                  )}
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="actions">
+          <a className="btn" href={reportDownloadUrl(result.session_id)} download>
+            Download report
+          </a>
+          <a
+            className="btn secondary"
+            href={printableReportUrl(result.session_id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Opens the report in a new tab with the print dialog; choose 'Save as PDF'."
+          >
+            Save as PDF
+          </a>
+          <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
+            Cleaned CSV
+          </a>
+        </div>
       </div>
 
       <div className="stats">
-        <div className="stat">
-          <div className="label">Rows</div>
-          <div className="value">{result.row_count.toLocaleString()}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Columns</div>
-          <div className="value">{result.column_count}</div>
-        </div>
-        <div className="stat">
+        <div className={`stat ${result.quality_issues.length > 0 ? "attention" : "good"}`}>
           <div className="label">Quality issues</div>
           <div className="value">{result.quality_issues.length}</div>
+        </div>
+        <div className="stat">
+          <div className="label">Cleaning steps</div>
+          <div className="value">{result.cleaning_actions.length}</div>
         </div>
         <div className="stat">
           <div className="label">Charts</div>
@@ -134,41 +173,35 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
       <nav className="section-nav" aria-label="Jump to section">
         {sections.map(([id, label]) => (
-          <a key={id} href={`#${id}`}>
+          <a
+            key={id}
+            href={`#${id}`}
+            onClick={() => {
+              // Jumping to a collapsed section opens it.
+              const target = document.getElementById(id);
+              if (target instanceof HTMLDetailsElement) target.open = true;
+            }}
+          >
             {label}
           </a>
         ))}
       </nav>
 
-      <div className="actions">
-        <a className="btn" href={reportDownloadUrl(result.session_id)} download>
-          Download HTML report
-        </a>
-        <a
-          className="btn secondary"
-          href={printableReportUrl(result.session_id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Opens the report in a new tab with the print dialog; choose 'Save as PDF'."
-        >
-          Save report as PDF
-        </a>
-        <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
-          Download cleaned data (CSV)
-        </a>
-      </div>
-
       <div id="summary" className="panel">
-        <h2>
-          Summary{" "}
-          {result.explanation.source === "llm" ? `(written by ${result.explanation.model})` : "(rule-based)"}
-        </h2>
+        <h2>Summary</h2>
+        <p className="source-note">
+          {result.explanation.source === "llm"
+            ? `Written by ${result.explanation.model} from the computed results; every number in it was checked.`
+            : result.explanation.configured && result.explanation.fallback_reason
+              ? `Rule-based: the language model's text wasn't used (${result.explanation.fallback_reason}).`
+              : "Rule-based summary. Set an LLM API key on the server for a written explanation."}
+        </p>
         <p>{result.explanation.dataset_overview}</p>
-        <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Analysis summary</h3>
+        <h3>Key findings</h3>
         <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
         {result.explanation.recommendations.length > 0 && (
           <>
-            <h3 style={{ fontSize: "0.95rem", marginTop: "1rem" }}>Recommendations</h3>
+            <h3>Recommendations</h3>
             <ul>
               {result.explanation.recommendations.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -182,7 +215,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <div className="panel">
           <h2>Data quality</h2>
           {result.quality_issues.length === 0 ? (
-            <p style={{ color: "var(--muted)" }}>No issues detected.</p>
+            <p className="empty-good">
+              <span aria-hidden="true">✓</span> No issues found.
+            </p>
           ) : (
             <ul className="issue-list">
               {result.quality_issues.map((issue, i) => (
@@ -198,7 +233,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <div className="panel">
           <h2>Cleaning actions</h2>
           {result.cleaning_actions.length === 0 ? (
-            <p style={{ color: "var(--muted)" }}>No cleaning was needed.</p>
+            <p className="empty-good">
+              <span aria-hidden="true">✓</span> No cleaning was needed.
+            </p>
           ) : (
             <ul className="insight-list">
               {result.cleaning_actions.map((a, i) => (
@@ -228,22 +265,22 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               <thead>
                 <tr>
                   <th>Column</th>
-                  <th>Mean</th>
-                  <th>Median</th>
-                  <th>Std</th>
-                  <th>Min</th>
-                  <th>Max</th>
+                  <th className="num">Mean</th>
+                  <th className="num">Median</th>
+                  <th className="num">Std dev</th>
+                  <th className="num">Min</th>
+                  <th className="num">Max</th>
                 </tr>
               </thead>
               <tbody>
                 {result.numeric_summaries.map((s) => (
                   <tr key={s.column}>
                     <td>{s.column}</td>
-                    <td>{s.mean?.toLocaleString()}</td>
-                    <td>{s.median?.toLocaleString()}</td>
-                    <td>{s.std?.toLocaleString()}</td>
-                    <td>{s.min?.toLocaleString()}</td>
-                    <td>{s.max?.toLocaleString()}</td>
+                    <td className="num">{formatNumber(s.mean)}</td>
+                    <td className="num">{formatNumber(s.median)}</td>
+                    <td className="num">{formatNumber(s.std)}</td>
+                    <td className="num">{formatNumber(s.min)}</td>
+                    <td className="num">{formatNumber(s.max)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -288,7 +325,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
       <div id="chart-builder" className="panel">
         <h2>Build your own chart</h2>
-        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
+        <p className="panel-lead">
           Pick a chart type and columns. The server computes every figure from your data as
           recorded, without the filled-in gaps.
         </p>
@@ -297,10 +334,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
 
       <div id="ask" className="panel">
         <h2>Ask a question</h2>
-        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
-          Questions are answered from the pre-computed analysis facts. Free-form answers
-          need an LLM API key on the server; without one you get the key findings. Follow-up
-          questions can refer to earlier answers.
+        <p className="panel-lead">
+          Answers come from the computed results only. Free-form answers need an LLM API key on
+          the server; without one you get the key findings. Follow-ups can refer to earlier answers.
         </p>
         {thread.length > 0 && (
           <ol className="qa-thread" aria-label="Questions and answers">
@@ -309,8 +345,11 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
                 <div className="qa-question">{turn.question}</div>
                 <div className="qa-answer">
                   {turn.answer}
-                  <div className="qa-source">
-                    {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
+                  <div className="qa-meta">
+                    <span className="qa-source">
+                      {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
+                    </span>
+                    <CopyButton text={turn.answer} />
                   </div>
                 </div>
               </li>
@@ -337,13 +376,14 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 void handleAsk();
               }
             }}
           />
-          <div style={{ marginTop: "0.75rem" }}>
+          <div className="qa-actions">
+            <span className="muted small">Enter to send · Shift+Enter for a new line</span>
             <button
               type="button"
               className="btn"
@@ -357,7 +397,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       </div>
 
-      <div id="data" className="panel">
+      <details id="data" className="panel collapsible">
+        <summary>
+          <h2>Data preview</h2>
+        </summary>
         <div className="tabs">
           <button
             type="button"
@@ -378,10 +421,12 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           title=""
           rows={previewTab === "raw" ? result.preview_rows : result.cleaned_preview_rows}
         />
-      </div>
+      </details>
 
-      <div id="columns" className="panel">
-        <h2>Column profiles</h2>
+      <details id="columns" className="panel collapsible">
+        <summary>
+          <h2>Column profiles</h2>
+        </summary>
         <div className="scroll-table">
           <table className="data">
             <thead>
@@ -397,8 +442,8 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               {result.columns.map((col) => (
                 <tr key={col.name}>
                   <td>{col.name}</td>
-                  <td>
-                    {col.dtype}
+                  <td title={col.dtype}>
+                    {friendlyType(col.dtype)}
                     {col.is_identifier && <span className="badge info">identifier</span>}
                   </td>
                   <td>{col.null_pct}%</td>
@@ -409,7 +454,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             </tbody>
           </table>
         </div>
-      </div>
+      </details>
     </>
   );
 }
