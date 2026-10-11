@@ -175,7 +175,9 @@ export interface components {
             /** Chat History */
             chat_history: components["schemas"]["ChatTurn"][];
             /** Cleaned Preview Rows */
-            cleaned_preview_rows: Record<string, unknown>[];
+            cleaned_preview_rows: {
+                [key: string]: unknown;
+            }[];
             /** Cleaning Actions */
             cleaning_actions: components["schemas"]["CleaningAction"][];
             /** Column Count */
@@ -190,7 +192,9 @@ export interface components {
             /** Numeric Summaries */
             numeric_summaries: components["schemas"]["NumericSummary"][];
             /** Preview Rows */
-            preview_rows: Record<string, unknown>[];
+            preview_rows: {
+                [key: string]: unknown;
+            }[];
             /** Quality Issues */
             quality_issues: components["schemas"]["QualityIssue"][];
             /** Row Count */
@@ -206,10 +210,7 @@ export interface components {
         };
         /** Body_upload_dataset_api_upload_post */
         Body_upload_dataset_api_upload_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** CategoricalSummary */
@@ -217,7 +218,9 @@ export interface components {
             /** Column */
             column: string;
             /** Top Values */
-            top_values: Record<string, unknown>[];
+            top_values: {
+                [key: string]: unknown;
+            }[];
         };
         /** ChartSpec */
         ChartSpec: {
@@ -226,7 +229,9 @@ export interface components {
             /** Id */
             id: string;
             /** Plotly Json */
-            plotly_json: Record<string, unknown>;
+            plotly_json: {
+                [key: string]: unknown;
+            };
             /** Title */
             title: string;
         };
@@ -385,7 +390,9 @@ export interface components {
             /** Column */
             column: string | null;
             /** Details */
-            details: Record<string, unknown>;
+            details: {
+                [key: string]: unknown;
+            };
             /** Message */
             message: string;
             /** Severity */
@@ -449,6 +456,10 @@ export interface components {
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, unknown>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
