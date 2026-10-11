@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     # and present; leave empty when nothing in front of the app sets it.
     client_ip_header: str = ""
     custom_charts_per_hour: int = 120
+    # Prediction trains several models with cross-validation, so it's limited more tightly.
+    models_per_hour: int = 20
     # Swagger UI at /docs and ReDoc at /redoc; render.yaml turns them off for the public site.
     api_docs: bool = True
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

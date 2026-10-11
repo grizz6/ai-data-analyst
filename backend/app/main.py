@@ -58,6 +58,8 @@ async def limit_request_rate(request: Request, call_next):
             limiter, limit, what = rate_limit.questions, settings.questions_per_hour, "questions"
         elif path.startswith("/api/sessions/") and path.endswith("/charts"):
             limiter, limit, what = rate_limit.charts, settings.custom_charts_per_hour, "chart builds"
+        elif path.startswith("/api/sessions/") and path.endswith("/model"):
+            limiter, limit, what = rate_limit.models, settings.models_per_hour, "predictions"
         else:
             return await call_next(request)
         visitor = rate_limit.visitor_address(

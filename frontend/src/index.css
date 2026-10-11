@@ -802,3 +802,48 @@ html {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+.model-results {
+  margin-top: 1rem;
+}
+
+.model-results h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+tr.best td {
+  background: rgba(52, 211, 153, 0.06);
+}
+
+td .badge.good {
+  margin-left: 0.4rem;
+}
+
+.importance-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.importance-list li {
+  display: grid;
+  grid-template-columns: minmax(6rem, 12rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.importance-name {
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.importance-bar {
+  display: block;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--accent);
+  min-width: 2px;
+}

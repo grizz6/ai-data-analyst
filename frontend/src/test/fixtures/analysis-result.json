@@ -551,5 +551,79 @@
       ],
       "summary": "'units' was averaged into 12 monthly periods. There are too few periods (under 20) to test whether its level is stable. A Holt's linear trend projection puts it near 84.69 by 2025-03-01 (roughly 45.50 to 123.89)."
     }
-  ]
+  ],
+  "clustering": {
+    "features": [
+      "sales",
+      "units"
+    ],
+    "rows_used": 180,
+    "k": 3,
+    "silhouette": 0.8686,
+    "clear": true,
+    "clusters": [
+      {
+        "cluster": 1,
+        "size": 60,
+        "distinctive": [
+          {
+            "column": "units",
+            "mean": 8.0978,
+            "sd_from_average": 0.71
+          },
+          {
+            "column": "sales",
+            "mean": 0.0509,
+            "sd_from_average": -0.7
+          }
+        ]
+      },
+      {
+        "cluster": 2,
+        "size": 60,
+        "distinctive": [
+          {
+            "column": "sales",
+            "mean": 7.9587,
+            "sd_from_average": 1.4
+          },
+          {
+            "column": "units",
+            "mean": 8.0104,
+            "sd_from_average": 0.69
+          }
+        ]
+      },
+      {
+        "cluster": 3,
+        "size": 60,
+        "distinctive": [
+          {
+            "column": "units",
+            "mean": -0.038,
+            "sd_from_average": -1.4
+          },
+          {
+            "column": "sales",
+            "mean": 0.0827,
+            "sd_from_average": -0.69
+          }
+        ]
+      }
+    ],
+    "pca_explained": [
+      0.7392,
+      0.2608
+    ],
+    "chart": {
+      "id": "clusters_pca",
+      "title": "Groups of similar rows (PCA map)",
+      "chart_type": "scatter",
+      "plotly_json": {
+        "data": [],
+        "layout": {}
+      }
+    },
+    "summary": "The rows fall into 3 groups (silhouette 0.87). The largest, 60 rows, stands out for units high, sales low. The first two principal components capture 100% of the variation."
+  }
 }

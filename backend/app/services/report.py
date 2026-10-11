@@ -44,7 +44,11 @@ def render_html_report(result: AnalysisResult, *, for_print: bool = False, nonce
     return template.render(
         result=result,
         # Time-series charts go after the overview charts, in the same grid.
-        charts=[*result.charts, *(chart for ts in result.time_series for chart in ts.charts)],
+        charts=[
+            *result.charts,
+            *(chart for ts in result.time_series for chart in ts.charts),
+            *([result.clustering.chart] if result.clustering and result.clustering.chart else []),
+        ],
         for_print=for_print,
         nonce=nonce,
         plotly_src=VENDOR_PLOTLY_PATH if for_print else PLOTLY_CDN_URL,

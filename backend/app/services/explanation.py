@@ -128,6 +128,7 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
             }
             for t in result.time_series
         ],
+        "clustering": result.clustering.summary if result.clustering else None,
         "statistical_tests": {
             "distributions": [
                 {

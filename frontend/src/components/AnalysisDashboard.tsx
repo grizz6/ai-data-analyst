@@ -7,6 +7,7 @@ import type { AnalysisResult, ChatTurn } from "../types";
 const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
+import MachineLearningPanel from "./MachineLearningPanel";
 import StatisticsPanel from "./StatisticsPanel";
 import TimeSeriesPanel from "./TimeSeriesPanel";
 
@@ -111,6 +112,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     ...(result.numeric_summaries.length > 0 ? [["statistics", "Statistics"] as [string, string]] : []),
     ["tests", "Tests"],
     ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [string, string]] : []),
+    ["machine-learning", "ML"],
     ["charts", "Charts"],
     ["chart-builder", "Build a chart"],
     ["ask", "Ask"],
@@ -359,6 +361,11 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           <TimeSeriesPanel series={result.time_series} />
         </div>
       )}
+
+      <div id="machine-learning" className="panel">
+        <h2>Machine learning</h2>
+        <MachineLearningPanel sessionId={result.session_id} columns={result.columns} clustering={result.clustering} />
+      </div>
 
       <div id="charts" className="panel">
         <h2>Visualizations</h2>

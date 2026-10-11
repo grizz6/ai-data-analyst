@@ -130,6 +130,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Predict Column
+         * @description Compare models that predict one column from the others, with cross-validation.
+         */
+        post: operations["predict_column_api_sessions__session_id__model_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/report": {
         parameters: {
             query?: never;
@@ -184,6 +204,7 @@ export interface components {
             }[];
             /** Cleaning Actions */
             cleaning_actions: components["schemas"]["CleaningAction"][];
+            clustering: components["schemas"]["ClusterAnalysis"] | null;
             /** Column Count */
             column_count: number;
             /** Columns */
@@ -304,6 +325,37 @@ export interface components {
             /** Rows Affected */
             rows_affected: number | null;
         };
+        /** ClusterAnalysis */
+        ClusterAnalysis: {
+            chart: components["schemas"]["ChartSpec"] | null;
+            /** Clear */
+            clear: boolean;
+            /** Clusters */
+            clusters: components["schemas"]["ClusterProfile"][];
+            /** Features */
+            features: string[];
+            /** K */
+            k: number;
+            /** Pca Explained */
+            pca_explained: number[];
+            /** Rows Used */
+            rows_used: number;
+            /** Silhouette */
+            silhouette: number;
+            /** Summary */
+            summary: string;
+        };
+        /** ClusterProfile */
+        ClusterProfile: {
+            /** Cluster */
+            cluster: number;
+            /** Distinctive */
+            distinctive: {
+                [key: string]: unknown;
+            }[];
+            /** Size */
+            size: number;
+        };
         /** ColumnProfile */
         ColumnProfile: {
             /** Dtype */
@@ -412,6 +464,13 @@ export interface components {
              */
             source: "rule_based" | "llm";
         };
+        /** FeatureImportance */
+        FeatureImportance: {
+            /** Feature */
+            feature: string;
+            /** Importance */
+            importance: number;
+        };
         /** ForecastPoint */
         ForecastPoint: {
             /** Date */
@@ -469,6 +528,56 @@ export interface components {
             column_b: string;
             /** Correlation */
             correlation: number;
+        };
+        /** ModelReport */
+        ModelReport: {
+            /** Beats Baseline */
+            beats_baseline: boolean;
+            /** Best Model */
+            best_model: string;
+            /** Dropped Features */
+            dropped_features: string[];
+            /** Features */
+            features: string[];
+            /** Folds */
+            folds: number;
+            /** Importances */
+            importances: components["schemas"]["FeatureImportance"][];
+            /** Notes */
+            notes: string[];
+            /** Primary Metric */
+            primary_metric: string;
+            /** Rows Used */
+            rows_used: number;
+            /** Scores */
+            scores: components["schemas"]["ModelScore"][];
+            /** Secondary Metric */
+            secondary_metric: string;
+            /** Summary */
+            summary: string;
+            /** Target */
+            target: string;
+            /**
+             * Task
+             * @enum {string}
+             */
+            task: "classification" | "regression";
+        };
+        /** ModelRequest */
+        ModelRequest: {
+            /** Target */
+            target: string;
+        };
+        /** ModelScore */
+        ModelScore: {
+            /** Name */
+            name: string;
+            /** Primary */
+            primary: number;
+            /** Primary Std */
+            primary_std: number;
+            /** Secondary */
+            secondary: number;
         };
         /** NumericSummary */
         NumericSummary: {
@@ -861,6 +970,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    predict_column_api_sessions__session_id__model_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelReport"];
                 };
             };
             /** @description Validation Error */

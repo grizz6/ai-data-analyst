@@ -30,10 +30,11 @@ def no_real_llm(monkeypatch):
 @pytest.fixture(autouse=True)
 def fresh_rate_limits():
     """Each test starts with no requests counted against the per-hour limits."""
-    for limiter in (rate_limit.uploads, rate_limit.questions, rate_limit.charts):
+    limiters = (rate_limit.uploads, rate_limit.questions, rate_limit.charts, rate_limit.models)
+    for limiter in limiters:
         limiter.reset()
     yield
-    for limiter in (rate_limit.uploads, rate_limit.questions, rate_limit.charts):
+    for limiter in limiters:
         limiter.reset()
 
 

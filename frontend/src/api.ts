@@ -1,4 +1,4 @@
-import type { AnalysisResult, ChartSpec, CustomChartRequest, QuestionResponse } from "./types";
+import type { AnalysisResult, ChartSpec, CustomChartRequest, ModelReport, QuestionResponse } from "./types";
 
 /** The server's message for a failed request, or `fallback` when it sent none worth showing. */
 async function errorMessage(res: Response, fallback: string): Promise<string> {
@@ -52,6 +52,17 @@ export async function buildChart(sessionId: string, request: CustomChartRequest)
   if (!res.ok) {
     throw new Error(await errorMessage(res, "Chart failed"));
   }
+  return res.json();
+}
+
+/** Train and compare models that predict `target` from the other columns. */
+export async function trainModel(sessionId: string, target: string): Promise<ModelReport> {
+  const res = await fetch(`/api/sessions/${sessionId}/model`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "Prediction failed"));
   return res.json();
 }
 

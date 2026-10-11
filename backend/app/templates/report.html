@@ -183,6 +183,21 @@
   </section>
   {% endif %}
 
+  {% if result.clustering %}
+  <section>
+    <h2>Groups of similar rows</h2>
+    <p>{{ result.clustering.summary }}</p>
+    {% if result.clustering.clear %}
+    <table>
+      <tr><th>Group</th><th>Rows</th><th>Stands out for</th></tr>
+      {% for c in result.clustering.clusters %}
+      <tr><td>Group {{ c.cluster }}</td><td class="num">{{ c.size | num }}</td><td>{% for d in c.distinctive %}{{ d.column }} {{ "high" if d.sd_from_average > 0 else "low" }} (avg {{ d.mean | num }}){% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if result.time_series %}
   <section>
     <h2>Time series</h2>

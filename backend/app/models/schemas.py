@@ -236,6 +236,61 @@ class TimeSeriesAnalysis(ApiModel):
     summary: str
 
 
+class ClusterProfile(ApiModel):
+    cluster: int
+    size: int
+    # Columns where this group sits furthest from the overall average, in standard deviations.
+    distinctive: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ClusterAnalysis(ApiModel):
+    features: list[str]
+    rows_used: int
+    k: int
+    # -1 to 1; above about 0.5 is clear separation, under 0.25 is no real structure.
+    silhouette: float
+    clear: bool
+    clusters: list[ClusterProfile] = Field(default_factory=list)
+    # Share of the variation each principal component captures.
+    pca_explained: list[float] = Field(default_factory=list)
+    chart: ChartSpec | None = None
+    summary: str
+
+
+class ModelRequest(ApiModel):
+    target: str = Field(max_length=500)
+
+
+class ModelScore(ApiModel):
+    name: str
+    # Classification: accuracy and macro F1. Regression: R² and mean absolute error.
+    primary: float
+    primary_std: float
+    secondary: float
+
+
+class FeatureImportance(ApiModel):
+    feature: str
+    importance: float
+
+
+class ModelReport(ApiModel):
+    target: str
+    task: Literal["classification", "regression"]
+    primary_metric: str
+    secondary_metric: str
+    rows_used: int
+    features: list[str]
+    dropped_features: list[str] = Field(default_factory=list)
+    folds: int
+    scores: list[ModelScore]
+    best_model: str
+    beats_baseline: bool
+    importances: list[FeatureImportance] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    summary: str
+
+
 class ChatTurn(ApiModel):
     """One question asked about an analysis, and the answer it got."""
 
@@ -269,6 +324,7 @@ class AnalysisResult(ApiModel):
     explanation: Explanation
     statistics: StatisticalTests = Field(default_factory=StatisticalTests)
     time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
+    clustering: ClusterAnalysis | None = None
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
     # Questions asked so far, oldest first. Kept with the session, so the thread

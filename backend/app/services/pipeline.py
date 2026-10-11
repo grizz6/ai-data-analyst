@@ -10,6 +10,7 @@ from app.services import (
     explanation,
     ingestion,
     insights,
+    ml,
     profiling,
     quality,
     semantics,
@@ -55,6 +56,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     chart_specs = charts.build_charts(metrics_df)
     statistical_tests = statistics.compute_statistics(metrics_df)
     time_series = timeseries.analyze_time_series(metrics_df)
+    clustering = ml.cluster(metrics_df)
     rule_insights = insights.generate_rule_insights(
         prepared_df,
         quality_issues,
@@ -123,6 +125,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         charts=chart_specs,
         statistics=statistical_tests,
         time_series=time_series,
+        clustering=clustering,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

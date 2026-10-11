@@ -16,10 +16,12 @@ from app.models.schemas import (
     ChartSpec,
     ChatTurn,
     CustomChartRequest,
+    ModelReport,
+    ModelRequest,
     QuestionRequest,
     QuestionResponse,
 )
-from app.services import custom_charts, explanation, report
+from app.services import custom_charts, explanation, ml, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import add_chat_turn, delete, get, save
@@ -162,6 +164,27 @@ async def build_chart(session_id: str, body: CustomChartRequest):
     try:
         return await run_in_threadpool(run_in_slot, build)
     except custom_charts.ChartRequestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except BusyError as exc:
+        raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
+
+
+@router.post("/sessions/{session_id}/model", response_model=ModelReport)
+async def predict_column(session_id: str, body: ModelRequest):
+    """Compare models that predict one column from the others, with cross-validation."""
+    result = session_or_404(session_id)
+    if result.chart_csv is None:
+        raise HTTPException(
+            status_code=404, detail="Prediction isn't available for this analysis; upload the file again."
+        )
+
+    def train() -> ModelReport:
+        df = custom_charts.load_chart_data(result, result.chart_csv or b"")
+        return ml.predict(df, body.target)
+
+    try:
+        return await run_in_threadpool(run_in_slot, train)
+    except ml.ModelRequestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except BusyError as exc:
         raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
