@@ -82,3 +82,17 @@ def test_report_downloads_as_html_attachment(client, sample_csv_bytes):
     assert res.headers["content-type"].startswith("text/html")
     assert "attachment" in res.headers["content-disposition"]
     assert "sales_sample.csv" in res.text
+
+
+def test_sample_file_is_served_for_the_try_it_button(client, sample_csv_bytes):
+    res = client.get("/api/sample.csv")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/csv")
+    assert res.content == sample_csv_bytes
+
+
+def test_missing_sample_file_is_404(client, monkeypatch, tmp_path):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "sample_data_path", str(tmp_path / "nope.csv"))
+    assert client.get("/api/sample.csv").status_code == 404

@@ -42,6 +42,10 @@ export async function buildChart(sessionId: string, request: CustomChartRequest)
   return res.json();
 }
 
+export function sampleDataUrl(): string {
+  return "/api/sample.csv";
+}
+
 export function reportDownloadUrl(sessionId: string): string {
   return `/api/sessions/${sessionId}/report`;
 }

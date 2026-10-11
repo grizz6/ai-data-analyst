@@ -8,6 +8,20 @@ const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
 
+/** A few questions this file can answer, built from its own columns. */
+export function suggestedQuestions(result: AnalysisResult): string[] {
+  const questions: string[] = [];
+  const category = result.categorical_summaries[0]?.column;
+  const measure = result.numeric_summaries[0]?.column;
+  if (category && measure) questions.push(`Which ${category} has the highest ${measure}?`);
+  const pair = result.correlations[0];
+  if (pair) questions.push(`How are ${pair.column_a} and ${pair.column_b} related?`);
+  const trend = result.trends[0];
+  if (trend) questions.push(`How is ${trend.column} changing over time?`);
+  questions.push("What should I look into first?");
+  return questions;
+}
+
 interface Props {
   result: AnalysisResult;
   loading?: boolean;
@@ -22,8 +36,8 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const [askError, setAskError] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<"raw" | "cleaned">("cleaned");
 
-  const handleAsk = async () => {
-    const asked = question.trim();
+  const handleAsk = async (text: string = question) => {
+    const asked = text.trim();
     if (!asked || asking) return;
     setAsking(true);
     setAskError(null);
@@ -46,6 +60,20 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       setAsking(false);
     }
   };
+
+  const asked = new Set(thread.map((t) => t.question));
+  const suggestions = suggestedQuestions(result).filter((q) => !asked.has(q));
+  const sections: [string, string][] = [
+    ["summary", "Summary"],
+    ["quality", "Quality"],
+    ["insights", "Insights"],
+    ...(result.numeric_summaries.length > 0 ? [["statistics", "Statistics"] as [string, string]] : []),
+    ["charts", "Charts"],
+    ["chart-builder", "Build a chart"],
+    ["ask", "Ask"],
+    ["data", "Data"],
+    ["columns", "Columns"],
+  ];
 
   return (
     <>
@@ -104,6 +132,14 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       </div>
 
+      <nav className="section-nav" aria-label="Jump to section">
+        {sections.map(([id, label]) => (
+          <a key={id} href={`#${id}`}>
+            {label}
+          </a>
+        ))}
+      </nav>
+
       <div className="actions">
         <a className="btn" href={reportDownloadUrl(result.session_id)} download>
           Download HTML report
@@ -122,7 +158,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </a>
       </div>
 
-      <div className="panel">
+      <div id="summary" className="panel">
         <h2>
           Summary{" "}
           {result.explanation.source === "llm" ? `(written by ${result.explanation.model})` : "(rule-based)"}
@@ -142,7 +178,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         )}
       </div>
 
-      <div className="grid-2">
+      <div id="quality" className="grid-2">
         <div className="panel">
           <h2>Data quality</h2>
           {result.quality_issues.length === 0 ? (
@@ -173,7 +209,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       </div>
 
-      <div className="panel">
+      <div id="insights" className="panel">
         <h2>Key insights</h2>
         <ul className="insight-list">
           {result.rule_insights.map((insight, i) => (
@@ -185,7 +221,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       </div>
 
       {result.numeric_summaries.length > 0 && (
-        <div className="panel">
+        <div id="statistics" className="panel">
           <h2>Numeric statistics</h2>
           <div className="scroll-table">
             <table className="data">
@@ -243,14 +279,14 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       )}
 
-      <div className="panel">
+      <div id="charts" className="panel">
         <h2>Visualizations</h2>
         <Suspense fallback={<p className="muted">Loading charts…</p>}>
           <ChartGrid charts={result.charts} explanation={result.explanation} />
         </Suspense>
       </div>
 
-      <div className="panel">
+      <div id="chart-builder" className="panel">
         <h2>Build your own chart</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
           Pick a chart type and columns. The server computes every figure from your data as
@@ -259,7 +295,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <ChartBuilder sessionId={result.session_id} columns={result.columns} />
       </div>
 
-      <div className="panel">
+      <div id="ask" className="panel">
         <h2>Ask a question</h2>
         <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
           Questions are answered from the pre-computed analysis facts. Free-form answers
@@ -280,6 +316,15 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               </li>
             ))}
           </ol>
+        )}
+        {suggestions.length > 0 && (
+          <div className="suggestions" aria-label="Suggested questions">
+            {suggestions.map((q) => (
+              <button key={q} type="button" className="chip" disabled={asking} onClick={() => handleAsk(q)}>
+                {q}
+              </button>
+            ))}
+          </div>
         )}
         <div className="qa-box">
           <textarea
@@ -303,7 +348,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               type="button"
               className="btn"
               disabled={asking || !question.trim()}
-              onClick={handleAsk}
+              onClick={() => handleAsk()}
             >
               {asking ? "Thinking…" : "Ask"}
             </button>
@@ -312,7 +357,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </div>
       </div>
 
-      <div className="panel">
+      <div id="data" className="panel">
         <div className="tabs">
           <button
             type="button"
@@ -335,7 +380,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         />
       </div>
 
-      <div className="panel">
+      <div id="columns" className="panel">
         <h2>Column profiles</h2>
         <div className="scroll-table">
           <table className="data">

@@ -26,6 +26,7 @@ COPY backend/requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY backend/app ./app
+COPY sample-data /app/sample-data
 COPY --from=frontend /app/frontend/dist /app/frontend/dist
 
 # Run as an unprivileged user that owns only the data directory.

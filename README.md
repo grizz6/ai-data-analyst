@@ -16,7 +16,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | REST API + interactive docs at `/docs` | Working |
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| Tests and CI | 218 backend tests (pytest) and 31 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
+| Tests and CI | 220 backend tests (pytest) and 37 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
 | Deployment | **Not yet deployed.** Runs locally, or as one Docker container (built and smoke-tested in CI) |
 
@@ -165,6 +165,7 @@ Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_b
 | `GET` | `/api/sessions/{id}/report` | Download the HTML report. With `?print=true` it is shown in the browser instead, in light colors, and opens the print dialog once the charts are drawn; the app's "Save report as PDF" button uses this, so PDFs need no server-side renderer |
 | `POST` | `/api/sessions/{id}/charts` | Build a chart the user picked: `chart_type` (`bar`, `line`, `scatter`, `histogram`, `box`), columns `x` and `y`, and `aggregate` (`count`, `sum`, `mean`, `median`). Drawn from the prepared data without filled-in gaps or identifier columns; a combination that doesn't fit (a histogram of text, say) gets a 400 saying why |
 | `GET` | `/api/sessions/{id}/cleaned.csv` | Download the full cleaned dataset as CSV (UTF-8 with a byte-order mark so Excel reads accents correctly). Gaps are filled here, as in the cleaned preview |
+| `GET` | `/api/sample.csv` | The example sales file behind the upload screen's "Try the sample sales data" link |
 | `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
 
 Problems with the file itself (empty, unreadable, bad sheet name) return 400 with a plain explanation. Unexpected server errors return 500 with a short reference code; the details go to the server log only.

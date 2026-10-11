@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sampleDataUrl } from "../api";
 
 interface Props {
   onUpload: (file: File) => void;
@@ -63,6 +64,24 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
       >
         {loading ? "Analyzing…" : "Choose file"}
       </button>
+      <p style={{ marginTop: "0.75rem" }}>
+        <button
+          type="button"
+          className="link-btn"
+          disabled={loading}
+          onClick={async () => {
+            try {
+              const res = await fetch(sampleDataUrl());
+              if (!res.ok) throw new Error();
+              handleFile(new File([await res.text()], "sales_sample.csv", { type: "text/csv" }));
+            } catch {
+              onReject("The sample file couldn't be loaded. Try uploading your own file.");
+            }
+          }}
+        >
+          No file handy? Try the sample sales data
+        </button>
+      </p>
       <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--muted)" }}>
         Max {maxUploadMb} MB · Analysis runs in Python (Pandas) on the server
       </p>

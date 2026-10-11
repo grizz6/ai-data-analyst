@@ -198,6 +198,13 @@
           autosize: true
         });
         delete layout.title; // the card heading already shows it
+        // Plotly's default white gridlines are harsh on a dark page; dim them on every axis.
+        var grid = "{{ 'rgba(75, 85, 99, 0.25)' if for_print else 'rgba(139, 156, 179, 0.18)' }}";
+        Object.keys(fig.layout || {}).concat(["xaxis", "yaxis"]).forEach(function (key) {
+          if (/^[xy]axis\d*$/.test(key)) {
+            layout[key] = Object.assign({}, layout[key] || {}, { gridcolor: grid, zerolinecolor: grid });
+          }
+        });
         if (window.Plotly) {
           drawn.push(Plotly.newPlot("chart-" + (i + 1), fig.data, layout, { displayModeBar: false, responsive: !{{ for_print | tojson }} }));
         }

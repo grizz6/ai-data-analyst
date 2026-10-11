@@ -1,5 +1,6 @@
 import Plotly from "plotly.js-cartesian-dist-min";
 import createPlotlyComponent from "react-plotly.js/factory";
+import { themedData, themedLayout } from "../chartTheme";
 import type { ChartSpec, Explanation } from "../types";
 
 // The default react-plotly.js import bundles all of Plotly (3D, maps, and more).
@@ -24,18 +25,8 @@ export default function ChartGrid({ charts, explanation }: Props) {
         <div key={chart.id} className="chart-card">
           <h3>{chart.title}</h3>
           <Plot
-            data={(chart.plotly_json as { data: object[] }).data}
-            layout={{
-              ...((chart.plotly_json as { layout?: object }).layout ?? {}),
-              // The card heading already shows the title, and Plotly's own would
-              // collide with per-panel labels on narrow screens.
-              title: undefined,
-              paper_bgcolor: "transparent",
-              plot_bgcolor: "transparent",
-              font: { color: "#e8eef5", size: 11 },
-              margin: { t: 36, r: 16, b: 40, l: 48 },
-              height: 320,
-            }}
+            data={themedData((chart.plotly_json as { data: Record<string, unknown>[] }).data) as Plotly.Data[]}
+            layout={themedLayout((chart.plotly_json as { layout?: Record<string, unknown> }).layout)}
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: "100%" }}
           />

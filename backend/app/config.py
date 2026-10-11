@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     missing_threshold_drop: float = 0.9
     # Built React app to serve at "/", if present (see app/frontend.py).
     frontend_dist: str = str(BACKEND_DIR.parent / "frontend" / "dist")
+    # Example file offered on the upload screen ("Try the sample sales data").
+    sample_data_path: str = str(BACKEND_DIR.parent / "sample-data" / "sales_sample.csv")
     # SQLite file holding stored analyses; ":memory:" keeps them in memory only.
     database_path: str = str(BACKEND_DIR / "data" / "ada.sqlite3")
     session_ttl_minutes: int = 60

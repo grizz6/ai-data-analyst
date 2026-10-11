@@ -41,4 +41,25 @@ describe("UploadPanel", () => {
     await waitFor(() => expect(onReject).toHaveBeenCalledWith("File exceeds the 1 MB upload limit."));
     expect(onUpload).not.toHaveBeenCalled();
   });
+
+  it("uploads the sample file on request", async () => {
+    const { onUpload } = renderPanel();
+    vi.mocked(fetch).mockResolvedValueOnce(new Response("date,region,product,sales,units\n2024-01-05,West,A,1,2\n"));
+    await userEvent.click(screen.getByRole("button", { name: /Try the sample sales data/ }));
+
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(1));
+    const file: File = onUpload.mock.calls[0][0];
+    expect(file.name).toBe("sales_sample.csv");
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith("/api/sample.csv");
+    expect(await file.text()).toMatch(/^date,region,product,sales,units/);
+  });
+
+  it("says so when the sample can't be fetched", async () => {
+    const { onUpload, onReject } = renderPanel();
+    vi.mocked(fetch).mockResolvedValueOnce(new Response("", { status: 404 }));
+    await userEvent.click(screen.getByRole("button", { name: /Try the sample sales data/ }));
+
+    await waitFor(() => expect(onReject).toHaveBeenCalledWith(expect.stringMatching(/sample file couldn't be loaded/)));
+    expect(onUpload).not.toHaveBeenCalled();
+  });
 });

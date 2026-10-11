@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
@@ -180,6 +180,15 @@ def cleaned_filename(original: str) -> str:
     """'Q3 sales (final).xlsx' -> 'Q3-sales-final-cleaned.csv', safe inside a header."""
     stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(original).stem).strip("-.") or "data"
     return f"{stem}-cleaned.csv"
+
+
+@router.get("/sample.csv", response_class=FileResponse)
+async def sample_data():
+    """The example dataset, so a visitor can try the app without a file of their own."""
+    path = Path(settings.sample_data_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="No sample file is installed on this server.")
+    return FileResponse(path, media_type="text/csv; charset=utf-8", filename="sales_sample.csv")
 
 
 @router.get("/health")

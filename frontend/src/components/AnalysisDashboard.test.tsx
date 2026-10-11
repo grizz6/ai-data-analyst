@@ -137,6 +137,32 @@ describe("AnalysisDashboard", () => {
     expect(box).toHaveValue("");
   });
 
+  it("offers questions built from the file's columns and asks one on click", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ answer: "West.", configured: false, source: "rule_based", model: null, fallback_reason: null }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AnalysisDashboard result={sampleResult()} />);
+
+    const chip = screen.getByRole("button", { name: "Which region has the highest sales?" });
+    expect(screen.getByRole("button", { name: "How are sales and units related?" })).toBeInTheDocument();
+    await userEvent.click(chip);
+
+    expect(await screen.findByText("West.")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ question: "Which region has the highest sales?" });
+    // Once asked, a suggestion is no longer offered.
+    expect(screen.queryByRole("button", { name: "Which region has the highest sales?" })).not.toBeInTheDocument();
+  });
+
+  it("links each section from the jump bar", () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+    const nav = screen.getByRole("navigation", { name: "Jump to section" });
+    for (const link of within(nav).getAllByRole("link")) {
+      const id = link.getAttribute("href")!.slice(1);
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  });
+
   it("shows the server's message when the session has expired", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "This analysis wasn't found." }, 404)));
     render(<AnalysisDashboard result={sampleResult()} />);

@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Root */
-        get: operations["root__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -30,6 +13,26 @@ export interface paths {
         };
         /** Health */
         get: operations["health_api_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sample.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sample Data
+         * @description The example dataset, so a visitor can try the app without a file of their own.
+         */
+        get: operations["sample_data_api_sample_csv_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -445,7 +448,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    root__get: {
+    health_api_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -465,7 +468,7 @@ export interface operations {
             };
         };
     };
-    health_api_health_get: {
+    sample_data_api_sample_csv_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -479,9 +482,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": unknown;
-                };
+                content?: never;
             };
         };
     };

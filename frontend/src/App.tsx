@@ -41,7 +41,13 @@ export default function App() {
           <h2>Upload dataset</h2>
           <UploadPanel onUpload={(f) => analyze(f)} onReject={setError} loading={loading} />
           {error && <p className="error-msg">{error}</p>}
-          {loading && <p className="loading">Running analysis pipeline…</p>}
+          {loading && (
+            <div className="loading" role="status">
+              <span className="spinner" aria-hidden="true" />
+              <p>Analyzing your file: checking quality, cleaning, computing statistics and drawing charts…</p>
+              <p className="muted">Large files can take up to a minute.</p>
+            </div>
+          )}
         </div>
       )}
 
