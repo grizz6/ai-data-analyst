@@ -47,6 +47,7 @@ async def limit_request_rate(request: Request, call_next):
             request.client.host if request.client else None,
             request.headers.get("x-forwarded-for"),
             settings.trusted_proxy_hops,
+            request.headers.get(settings.client_ip_header) if settings.client_ip_header else None,
         )
         wait = limiter.check(visitor, limit)
         if wait is not None:

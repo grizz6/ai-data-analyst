@@ -90,3 +90,22 @@ def test_behind_a_proxy_each_visitor_gets_their_own_limit(client, monkeypatch, s
     assert upload("198.51.100.4") == 200  # a different visitor
     assert upload("203.0.113.7") == 429
     assert upload("1.2.3.4, 203.0.113.7") == 429  # faking an address in front doesn't help
+
+
+def test_edge_header_wins_over_forwarded_for():
+    assert visitor_address("10.0.0.1", "6.6.6.6, 104.16.0.1", 1, "203.0.113.7") == "203.0.113.7"
+    assert visitor_address("10.0.0.1", None, 0, "  ") == "10.0.0.1"  # blank header: fall back
+
+
+def test_behind_an_edge_header_spoofed_forwarded_for_is_ignored(client, monkeypatch, sample_csv_bytes):
+    monkeypatch.setattr(settings, "uploads_per_hour", 1)
+    monkeypatch.setattr(settings, "client_ip_header", "true-client-ip")
+    files = {"file": ("sales.csv", sample_csv_bytes, "text/csv")}
+
+    def upload(headers: dict[str, str]) -> int:
+        return client.post("/api/upload", files=files, headers=headers).status_code
+
+    assert upload({"True-Client-IP": "203.0.113.7"}) == 200
+    assert upload({"True-Client-IP": "198.51.100.4"}) == 200
+    # Same visitor (the edge always sets the header), whatever X-Forwarded-For says.
+    assert upload({"True-Client-IP": "203.0.113.7", "X-Forwarded-For": "1.2.3.4"}) == 429

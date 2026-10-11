@@ -30,8 +30,7 @@ COPY sample-data /app/sample-data
 COPY --from=frontend /app/frontend/dist /app/frontend/dist
 
 # Run as an unprivileged user that owns only the data directory. UID 1000 is
-# what Hugging Face Spaces runs containers as, so the data directory stays
-# writable there too.
+# the usual first user, which hosts that run containers as a fixed user expect.
 RUN useradd --create-home --uid 1000 app \
     && mkdir -p /app/backend/data \
     && chown app /app/backend/data

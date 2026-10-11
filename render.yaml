@@ -1,0 +1,22 @@
+# Render Blueprint: one free web service running the Docker image, which
+# serves both the API and the built frontend. In the Render dashboard:
+# New > Blueprint > pick this repository. Pushes to main then redeploy it.
+services:
+  - type: web
+    name: ai-data-analyst
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      # The port the container listens on (see the Dockerfile).
+      - key: PORT
+        value: "8000"
+      # Render's Cloudflare edge overwrites this header with the visitor's
+      # address, so per-visitor rate limits can't be dodged by faking one.
+      - key: ADA_CLIENT_IP_HEADER
+        value: true-client-ip
+      # Optional: a key for model-written explanations. Render asks for the
+      # value when the Blueprint is created; leave it empty for rule-based text.
+      - key: ADA_LLM_API_KEY
+        sync: false

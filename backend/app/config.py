@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # hosts). 0 means the app is reached directly and the header is ignored, since
     # a visitor could otherwise write any address into it.
     trusted_proxy_hops: int = 0
+    # A header the hosting edge overwrites with the visitor's address (e.g.
+    # "true-client-ip" behind Render's Cloudflare edge). Takes priority when set
+    # and present; leave empty when nothing in front of the app sets it.
+    client_ip_header: str = ""
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Language model used only to explain results. Any OpenAI-compatible

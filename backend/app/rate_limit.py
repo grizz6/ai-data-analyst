@@ -61,13 +61,23 @@ class RateLimiter:
                 del self._hits[key]
 
 
-def visitor_address(direct_peer: str | None, forwarded_for: str | None, trusted_hops: int) -> str:
+def visitor_address(
+    direct_peer: str | None,
+    forwarded_for: str | None,
+    trusted_hops: int,
+    edge_client_ip: str | None = None,
+) -> str:
     """The visitor's IP address, as far as it can be trusted.
+
+    edge_client_ip is the value of a header the hosting edge overwrites with
+    the visitor's address (see ADA_CLIENT_IP_HEADER); when present it wins.
 
     Each trusted proxy appends the address it received the request from, so
     with N trusted proxies the Nth entry from the right is the visitor's.
     Entries further left were written by the client and could be anything.
     """
+    if edge_client_ip and edge_client_ip.strip():
+        return edge_client_ip.strip()
     if trusted_hops > 0 and forwarded_for:
         entries = [e.strip() for e in forwarded_for.split(",") if e.strip()]
         if entries:
