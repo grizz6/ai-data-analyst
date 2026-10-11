@@ -13,6 +13,7 @@ from app.services import (
     profiling,
     quality,
     semantics,
+    statistics,
 )
 from app.services.ingestion import df_preview_records
 from app.workload import run_in_slot
@@ -51,6 +52,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     correlations = analysis.top_correlations(metrics_df)
     trends = analysis.detect_trends(metrics_df)
     chart_specs = charts.build_charts(metrics_df)
+    statistical_tests = statistics.compute_statistics(metrics_df)
     rule_insights = insights.generate_rule_insights(
         prepared_df,
         quality_issues,
@@ -60,6 +62,10 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         trends,
         identifiers=identifiers,
     )
+    rule_insights += [
+        RuleInsight(category="statistics", title=title, message=message)
+        for title, message in statistics.statistics_insights(statistical_tests)
+    ]
     if table.sampled:
         rule_insights.insert(
             1,
@@ -113,6 +119,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         trends=trends,
         rule_insights=rule_insights,
         charts=chart_specs,
+        statistics=statistical_tests,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

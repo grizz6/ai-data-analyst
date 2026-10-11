@@ -249,6 +249,12 @@
       "title": "Highest units",
       "message": "Maximum units is 155 (row 15 of the file).",
       "severity": "info"
+    },
+    {
+      "category": "statistics",
+      "title": "sales by product",
+      "message": "'sales' differs between 'product' groups: highest in 'Product A' (mean 11,881.25), lowest in 'Product C' (mean 4,900.00). The groups explain 69% of its variation (Kruskal-Wallis, adjusted p < 0.001).",
+      "severity": "info"
     }
   ],
   "charts": [
@@ -331,5 +337,119 @@
   ],
   "chat_history": [],
   "rows_in_file": 31,
-  "sampled": false
+  "sampled": false,
+  "statistics": {
+    "distributions": [
+      {
+        "column": "sales",
+        "n": 31,
+        "skewness": 0.28326476998135863,
+        "kurtosis": -0.7578439994345647,
+        "normality_p": 0.4309102230389873,
+        "shape": "roughly symmetric",
+        "zscore_outliers": 0
+      },
+      {
+        "column": "units",
+        "n": 31,
+        "skewness": 0.3436404066821247,
+        "kurtosis": -0.5991214916170051,
+        "normality_p": 0.5260879982806819,
+        "shape": "roughly symmetric",
+        "zscore_outliers": 0
+      }
+    ],
+    "rank_correlations": [
+      {
+        "column_a": "sales",
+        "column_b": "units",
+        "n": 31,
+        "pearson": 0.9832053446315075,
+        "spearman": 0.9763,
+        "kendall": 0.9061536125301638,
+        "p_value": 7.935279257093958e-21,
+        "p_adjusted": 7.935279257093958e-21
+      }
+    ],
+    "categorical_associations": [
+      {
+        "column_a": "region",
+        "column_b": "product",
+        "n": 31,
+        "chi_square": 6.857,
+        "dof": 6,
+        "p_value": 0.3342996363499168,
+        "p_adjusted": 0.3342996363499168,
+        "cramers_v": 0.3326,
+        "sparse": true
+      }
+    ],
+    "group_differences": [
+      {
+        "group_column": "product",
+        "value_column": "sales",
+        "groups": 3,
+        "n": 31,
+        "anova_f": 31.159919452304724,
+        "anova_p": 7.572656867685177e-08,
+        "kruskal_h": 21.883064516129025,
+        "kruskal_p": 1.7707323302238976e-05,
+        "p_adjusted": 7.08292932089559e-05,
+        "eta_squared": 0.69,
+        "highest_group": "Product A",
+        "highest_mean": 11881.25,
+        "lowest_group": "Product C",
+        "lowest_mean": 4900.0
+      },
+      {
+        "group_column": "product",
+        "value_column": "units",
+        "groups": 3,
+        "n": 31,
+        "anova_f": 19.36540581778206,
+        "anova_p": 5.243759185491447e-06,
+        "kruskal_h": 18.38309461367763,
+        "kruskal_p": 0.00010189707662231655,
+        "p_adjusted": 0.0002037941532446331,
+        "eta_squared": 0.5804,
+        "highest_group": "Product A",
+        "highest_mean": 113.5625,
+        "lowest_group": "Product C",
+        "lowest_mean": 60.1429
+      },
+      {
+        "group_column": "region",
+        "value_column": "units",
+        "groups": 4,
+        "n": 31,
+        "anova_f": 12.32456933844965,
+        "anova_p": 2.9060040304547385e-05,
+        "kruskal_h": 17.060392099326936,
+        "kruskal_p": 0.0006868148180813604,
+        "p_adjusted": 0.0009157530907751471,
+        "eta_squared": 0.578,
+        "highest_group": "West",
+        "highest_mean": 124.1818,
+        "lowest_group": "South",
+        "lowest_mean": 69.4
+      },
+      {
+        "group_column": "region",
+        "value_column": "sales",
+        "groups": 4,
+        "n": 31,
+        "anova_f": 10.138874044816317,
+        "anova_p": 0.0001203888911126799,
+        "kruskal_h": 15.822140762463334,
+        "kruskal_p": 0.001233276620181135,
+        "p_adjusted": 0.001233276620181135,
+        "eta_squared": 0.5298,
+        "highest_group": "West",
+        "highest_mean": 12581.8182,
+        "lowest_group": "South",
+        "lowest_mean": 5980.0
+      }
+    ],
+    "missing_patterns": []
+  }
 }

@@ -219,6 +219,7 @@ export interface components {
             session_id: string;
             /** Sheet Name */
             sheet_name: string | null;
+            statistics: components["schemas"]["StatisticalTests"];
             /** Trends */
             trends: components["schemas"]["TrendInsight"][];
         };
@@ -226,6 +227,27 @@ export interface components {
         Body_upload_dataset_api_upload_post: {
             /** File */
             file: string;
+        };
+        /** CategoricalAssociation */
+        CategoricalAssociation: {
+            /** Chi Square */
+            chi_square: number;
+            /** Column A */
+            column_a: string;
+            /** Column B */
+            column_b: string;
+            /** Cramers V */
+            cramers_v: number;
+            /** Dof */
+            dof: number;
+            /** N */
+            n: number;
+            /** P Adjusted */
+            p_adjusted: number | null;
+            /** P Value */
+            p_value: number;
+            /** Sparse */
+            sparse: boolean;
         };
         /** CategoricalSummary */
         CategoricalSummary: {
@@ -343,6 +365,23 @@ export interface components {
             /** Y */
             y?: string | null;
         };
+        /** DistributionStat */
+        DistributionStat: {
+            /** Column */
+            column: string;
+            /** Kurtosis */
+            kurtosis: number | null;
+            /** N */
+            n: number;
+            /** Normality P */
+            normality_p: number | null;
+            /** Shape */
+            shape: string;
+            /** Skewness */
+            skewness: number | null;
+            /** Zscore Outliers */
+            zscore_outliers: number;
+        };
         /** Explanation */
         Explanation: {
             /** Analysis Summary */
@@ -371,10 +410,52 @@ export interface components {
              */
             source: "rule_based" | "llm";
         };
+        /** GroupDifference */
+        GroupDifference: {
+            /** Anova F */
+            anova_f: number | null;
+            /** Anova P */
+            anova_p: number | null;
+            /** Eta Squared */
+            eta_squared: number;
+            /** Group Column */
+            group_column: string;
+            /** Groups */
+            groups: number;
+            /** Highest Group */
+            highest_group: string;
+            /** Highest Mean */
+            highest_mean: number;
+            /** Kruskal H */
+            kruskal_h: number | null;
+            /** Kruskal P */
+            kruskal_p: number | null;
+            /** Lowest Group */
+            lowest_group: string;
+            /** Lowest Mean */
+            lowest_mean: number;
+            /** N */
+            n: number;
+            /** P Adjusted */
+            p_adjusted: number | null;
+            /** Value Column */
+            value_column: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** MissingPattern */
+        MissingPattern: {
+            /** Both Missing */
+            both_missing: number;
+            /** Column A */
+            column_a: string;
+            /** Column B */
+            column_b: string;
+            /** Correlation */
+            correlation: number;
         };
         /** NumericSummary */
         NumericSummary: {
@@ -437,6 +518,25 @@ export interface components {
              */
             source: "rule_based" | "llm";
         };
+        /** RankCorrelation */
+        RankCorrelation: {
+            /** Column A */
+            column_a: string;
+            /** Column B */
+            column_b: string;
+            /** Kendall */
+            kendall: number | null;
+            /** N */
+            n: number;
+            /** P Adjusted */
+            p_adjusted: number | null;
+            /** P Value */
+            p_value: number | null;
+            /** Pearson */
+            pearson: number | null;
+            /** Spearman */
+            spearman: number;
+        };
         /** RuleInsight */
         RuleInsight: {
             /** Category */
@@ -450,6 +550,19 @@ export interface components {
             severity: string;
             /** Title */
             title: string;
+        };
+        /** StatisticalTests */
+        StatisticalTests: {
+            /** Categorical Associations */
+            categorical_associations: components["schemas"]["CategoricalAssociation"][];
+            /** Distributions */
+            distributions: components["schemas"]["DistributionStat"][];
+            /** Group Differences */
+            group_differences: components["schemas"]["GroupDifference"][];
+            /** Missing Patterns */
+            missing_patterns: components["schemas"]["MissingPattern"][];
+            /** Rank Correlations */
+            rank_correlations: components["schemas"]["RankCorrelation"][];
         };
         /** TrendInsight */
         TrendInsight: {

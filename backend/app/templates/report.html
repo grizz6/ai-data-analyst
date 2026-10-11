@@ -139,6 +139,50 @@
     {% endif %}
   </section>
 
+  {% set st = result.statistics %}
+  {% if st.group_differences or st.categorical_associations or st.rank_correlations or st.distributions %}
+  <section>
+    <h2>Statistical tests</h2>
+    <p class="note">P-values are adjusted for the number of tests run (Benjamini–Hochberg); under 0.05 is unlikely to be chance.</p>
+    {% if st.group_differences %}
+    <h3>Differences between groups</h3>
+    <table>
+      <tr><th>Value</th><th>By</th><th>Highest</th><th>Lowest</th><th>Effect (η²)</th><th>Adjusted p</th></tr>
+      {% for g in st.group_differences %}
+      <tr><td>{{ g.value_column }}</td><td>{{ g.group_column }}</td><td>{{ g.highest_group }} ({{ g.highest_mean | num }})</td><td>{{ g.lowest_group }} ({{ g.lowest_mean | num }})</td><td class="num">{{ (g.eta_squared * 100) | round | int }}%</td><td>{{ g.p_adjusted | pval }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if st.categorical_associations %}
+    <h3>Related categories</h3>
+    <table>
+      <tr><th>Columns</th><th>Cramér's V</th><th>Adjusted p</th></tr>
+      {% for a in st.categorical_associations %}
+      <tr><td>{{ a.column_a }} × {{ a.column_b }}{% if a.sparse %} (sparse){% endif %}</td><td class="num">{{ "%.2f" | format(a.cramers_v) }}</td><td>{{ a.p_adjusted | pval }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if st.rank_correlations %}
+    <h3>Rank correlations</h3>
+    <table>
+      <tr><th>Columns</th><th>Spearman</th><th>Kendall</th><th>Pearson</th><th>Adjusted p</th></tr>
+      {% for r in st.rank_correlations %}
+      <tr><td>{{ r.column_a }} ↔ {{ r.column_b }}</td><td class="num">{{ "%.2f" | format(r.spearman) }}</td><td class="num">{{ "%.2f" | format(r.kendall) if r.kendall is not none else "–" }}</td><td class="num">{{ "%.2f" | format(r.pearson) if r.pearson is not none else "–" }}</td><td>{{ r.p_adjusted | pval }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if st.distributions %}
+    <h3>Distribution shape</h3>
+    <table>
+      <tr><th>Column</th><th>Shape</th><th>Skewness</th><th>Beyond 3 SD</th></tr>
+      {% for d in st.distributions %}
+      <tr><td>{{ d.column }}</td><td>{{ d.shape }}</td><td class="num">{{ d.skewness | num }}</td><td class="num">{{ d.zscore_outliers | num }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {% if result.charts %}
   <section>
     <h2>Charts</h2>

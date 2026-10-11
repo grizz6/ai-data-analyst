@@ -132,6 +132,77 @@ class CustomChartRequest(ApiModel):
     aggregate: Literal["count", "sum", "mean", "median"] = "count"
 
 
+class DistributionStat(ApiModel):
+    column: str
+    n: int
+    skewness: float | None
+    # Excess kurtosis: 0 for a normal distribution, above 0 for heavier tails.
+    kurtosis: float | None
+    # D'Agostino-Pearson test, H0: the values come from a normal distribution.
+    normality_p: float | None
+    shape: str
+    # Values more than 3 standard deviations from the mean.
+    zscore_outliers: int
+
+
+class RankCorrelation(ApiModel):
+    column_a: str
+    column_b: str
+    n: int
+    pearson: float | None
+    spearman: float
+    kendall: float | None  # computed on up to 5,000 rows
+    p_value: float | None  # for Spearman's rho
+    p_adjusted: float | None  # Benjamini-Hochberg across every pair tested
+
+
+class CategoricalAssociation(ApiModel):
+    column_a: str
+    column_b: str
+    n: int
+    chi_square: float
+    dof: int
+    p_value: float
+    p_adjusted: float | None
+    cramers_v: float
+    # More than 20% of expected counts under 5, where the chi-square p-value is unreliable.
+    sparse: bool
+
+
+class GroupDifference(ApiModel):
+    group_column: str
+    value_column: str
+    groups: int
+    n: int
+    anova_f: float | None
+    anova_p: float | None
+    kruskal_h: float | None
+    kruskal_p: float | None
+    p_adjusted: float | None  # Benjamini-Hochberg on the Kruskal-Wallis p-values
+    # Share of the value's variance explained by the groups (0 to 1).
+    eta_squared: float
+    highest_group: str
+    highest_mean: float
+    lowest_group: str
+    lowest_mean: float
+
+
+class MissingPattern(ApiModel):
+    column_a: str
+    column_b: str
+    both_missing: int
+    # Correlation between the two columns' "is missing" indicators.
+    correlation: float
+
+
+class StatisticalTests(ApiModel):
+    distributions: list[DistributionStat] = Field(default_factory=list)
+    rank_correlations: list[RankCorrelation] = Field(default_factory=list)
+    categorical_associations: list[CategoricalAssociation] = Field(default_factory=list)
+    group_differences: list[GroupDifference] = Field(default_factory=list)
+    missing_patterns: list[MissingPattern] = Field(default_factory=list)
+
+
 class ChatTurn(ApiModel):
     """One question asked about an analysis, and the answer it got."""
 
@@ -163,6 +234,7 @@ class AnalysisResult(ApiModel):
     rule_insights: list[RuleInsight]
     charts: list[ChartSpec]
     explanation: Explanation
+    statistics: StatisticalTests = Field(default_factory=StatisticalTests)
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
     # Questions asked so far, oldest first. Kept with the session, so the thread

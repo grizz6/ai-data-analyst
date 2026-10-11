@@ -118,6 +118,20 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
         "correlations": [p.model_dump() for p in result.correlations],
         "trends": [t.model_dump() for t in result.trends],
         "findings": [i.message for i in result.rule_insights],
+        "statistical_tests": {
+            "distributions": [
+                {
+                    "column": d.column,
+                    "skewness": d.skewness,
+                    "shape": d.shape,
+                    "outliers_beyond_3_sd": d.zscore_outliers,
+                }
+                for d in result.statistics.distributions[:8]
+            ],
+            "rank_correlations": [r.model_dump() for r in result.statistics.rank_correlations[:5]],
+            "categorical_associations": [a.model_dump() for a in result.statistics.categorical_associations[:5]],
+            "group_differences": [g.model_dump() for g in result.statistics.group_differences[:5]],
+        },
         "charts": [{"chart_id": c.id, "title": c.title, "type": c.chart_type} for c in result.charts],
     }
 

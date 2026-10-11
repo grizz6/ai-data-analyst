@@ -755,3 +755,16 @@ html {
   max-width: 75ch;
   margin: 0.5rem 0 0;
 }
+
+.stats-section + .stats-section {
+  margin-top: 1.5rem;
+}
+
+.stats-section .panel-lead {
+  margin: 0 0 0.5rem;
+}
+
+.badge.good {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--success);
+}

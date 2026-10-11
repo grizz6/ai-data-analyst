@@ -7,6 +7,7 @@ import type { AnalysisResult, ChatTurn } from "../types";
 const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
+import StatisticsPanel from "./StatisticsPanel";
 
 /** A few questions this file can answer, built from its own columns. */
 export function suggestedQuestions(result: AnalysisResult): string[] {
@@ -107,6 +108,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     ["quality", "Quality"],
     ["insights", "Insights"],
     ...(result.numeric_summaries.length > 0 ? [["statistics", "Statistics"] as [string, string]] : []),
+    ["tests", "Tests"],
     ["charts", "Charts"],
     ["chart-builder", "Build a chart"],
     ["ask", "Ask"],
@@ -343,6 +345,11 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           </ul>
         </div>
       )}
+
+      <div id="tests" className="panel">
+        <h2>Statistical tests</h2>
+        <StatisticsPanel tests={result.statistics} />
+      </div>
 
       <div id="charts" className="panel">
         <h2>Visualizations</h2>
