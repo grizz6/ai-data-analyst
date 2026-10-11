@@ -1,13 +1,15 @@
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-python-multipart==0.0.20
+fastapi==0.143.0
+# Pinned on its own: FastAPI allows any newer Starlette, and older ones have known vulnerabilities.
+starlette==1.7.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
 pandas==2.2.3
 numpy==2.2.1
 openpyxl==3.1.5
 xlrd==2.0.1
 plotly==5.24.1
-jinja2==3.1.4
-pydantic==2.10.3
-pydantic-settings==2.6.1
+jinja2==3.1.6
+pydantic==2.14.0
+pydantic-settings==2.15.0
 scipy==1.14.1
 httpx==0.28.1

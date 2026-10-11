@@ -26,7 +26,7 @@ export default function ChartGrid({ charts, explanation }: Props) {
           <h3>{chart.title}</h3>
           <Plot
             data={themedData((chart.plotly_json as { data: Record<string, unknown>[] }).data) as Plotly.Data[]}
-            layout={themedLayout((chart.plotly_json as { layout?: Record<string, unknown> }).layout)}
+            layout={themedLayout((chart.plotly_json as { layout?: Record<string, unknown> }).layout) as Partial<Plotly.Layout>}
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: "100%" }}
           />
