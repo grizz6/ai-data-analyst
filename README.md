@@ -1,6 +1,6 @@
 # AI Data Analyst Agent
 
-[![CI](https://github.com/grizz6/AI-Data-Analyst-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/grizz6/AI-Data-Analyst-Agent/actions/workflows/ci.yml)
+[![CI](https://github.com/grizz6/ai-data-analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/grizz6/ai-data-analyst/actions/workflows/ci.yml)
 
 ## About
 
