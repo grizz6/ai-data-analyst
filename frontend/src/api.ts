@@ -1,4 +1,4 @@
-import type { AnalysisResult, QuestionResponse } from "./types";
+import type { AnalysisResult, ChartSpec, CustomChartRequest, QuestionResponse } from "./types";
 
 export async function uploadDataset(file: File, sheet?: string): Promise<AnalysisResult> {
   const form = new FormData();
@@ -25,6 +25,19 @@ export async function askQuestion(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? "Question failed");
+  }
+  return res.json();
+}
+
+export async function buildChart(sessionId: string, request: CustomChartRequest): Promise<ChartSpec> {
+  const res = await fetch(`/api/sessions/${sessionId}/charts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Chart failed");
   }
   return res.json();
 }

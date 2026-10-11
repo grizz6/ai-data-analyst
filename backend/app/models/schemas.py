@@ -118,6 +118,20 @@ class ModelAnswer(ApiModel):
     answer: str = Field(min_length=1)
 
 
+class CustomChartRequest(ApiModel):
+    """A chart the user builds: which kind, and which columns go where.
+
+    histogram: x (numeric). bar: x (category), plus y when aggregating a value.
+    scatter: x and y (both numeric). line: x (date or number), plus y when
+    aggregating a value. box: y (numeric), optionally split by x (category).
+    """
+
+    chart_type: Literal["histogram", "bar", "scatter", "line", "box"]
+    x: str | None = None
+    y: str | None = None
+    aggregate: Literal["count", "sum", "mean", "median"] = "count"
+
+
 class ChatTurn(ApiModel):
     """One question asked about an analysis, and the answer it got."""
 
@@ -154,10 +168,16 @@ class AnalysisResult(ApiModel):
     # The full cleaned dataset as CSV, kept with the session for download but
     # left out of the JSON response, which only carries a preview.
     _cleaned_csv: bytes | None = PrivateAttr(default=None)
+    # The prepared data (no filled-in values, no identifier columns) that custom charts are drawn from.
+    _chart_csv: bytes | None = PrivateAttr(default=None)
 
     @property
     def cleaned_csv(self) -> bytes | None:
         return self._cleaned_csv
+
+    @property
+    def chart_csv(self) -> bytes | None:
+        return self._chart_csv
 
 
 class QuestionRequest(ApiModel):

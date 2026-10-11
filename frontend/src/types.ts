@@ -15,6 +15,7 @@ export type ChartSpec = Schemas["ChartSpec"];
 export type ChatTurn = Schemas["ChatTurn"];
 export type CleaningAction = Schemas["CleaningAction"];
 export type ColumnProfile = Schemas["ColumnProfile"];
+export type CustomChartRequest = Schemas["CustomChartRequest"];
 export type CorrelationPair = Schemas["CorrelationPair"];
 export type Explanation = Schemas["Explanation"];
 export type NumericSummary = Schemas["NumericSummary"];

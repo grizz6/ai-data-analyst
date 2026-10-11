@@ -5,6 +5,7 @@ import type { AnalysisResult, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
+import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
 
 interface Props {
@@ -247,6 +248,15 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <Suspense fallback={<p className="muted">Loading charts…</p>}>
           <ChartGrid charts={result.charts} explanation={result.explanation} />
         </Suspense>
+      </div>
+
+      <div className="panel">
+        <h2>Build your own chart</h2>
+        <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: 0 }}>
+          Pick a chart type and columns. The server computes every figure from your data as
+          recorded, without the filled-in gaps.
+        </p>
+        <ChartBuilder sessionId={result.session_id} columns={result.columns} />
       </div>
 
       <div className="panel">
