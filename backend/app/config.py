@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # Requests allowed per visitor (IP address) per hour; 0 turns a limit off.
     uploads_per_hour: int = 10
     questions_per_hour: int = 30
+    # Reverse proxies in front of the app that append to X-Forwarded-For (1 on most
+    # hosts). 0 means the app is reached directly and the header is ignored, since
+    # a visitor could otherwise write any address into it.
+    trusted_proxy_hops: int = 0
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Language model used only to explain results. Any OpenAI-compatible

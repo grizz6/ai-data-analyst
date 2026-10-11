@@ -1,5 +1,7 @@
+import pytest
+
 from app.config import settings
-from app.rate_limit import RateLimiter
+from app.rate_limit import RateLimiter, visitor_address
 
 
 class FakeClock:
@@ -59,3 +61,32 @@ def test_questions_are_limited_separately_from_uploads(client, monkeypatch, samp
     # Reading results and downloads are never limited.
     assert client.get(f"/api/sessions/{session_id}").status_code == 200
     assert client.get(f"/api/sessions/{session_id}/report").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "forwarded, hops, expected",
+    [
+        (None, 1, "10.0.0.1"),  # no header: the direct peer
+        ("203.0.113.7", 0, "10.0.0.1"),  # header ignored unless a proxy is trusted
+        ("203.0.113.7", 1, "203.0.113.7"),
+        ("6.6.6.6, 203.0.113.7", 1, "203.0.113.7"),  # a spoofed entry on the left is skipped
+        ("6.6.6.6, 203.0.113.7, 10.1.1.1", 2, "203.0.113.7"),
+        ("203.0.113.7", 3, "203.0.113.7"),  # fewer entries than hops: the leftmost there is
+    ],
+)
+def test_visitor_address_trusts_only_proxy_written_entries(forwarded, hops, expected):
+    assert visitor_address("10.0.0.1", forwarded, hops) == expected
+
+
+def test_behind_a_proxy_each_visitor_gets_their_own_limit(client, monkeypatch, sample_csv_bytes):
+    monkeypatch.setattr(settings, "uploads_per_hour", 1)
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    files = {"file": ("sales.csv", sample_csv_bytes, "text/csv")}
+
+    def upload(forwarded: str) -> int:
+        return client.post("/api/upload", files=files, headers={"X-Forwarded-For": forwarded}).status_code
+
+    assert upload("203.0.113.7") == 200
+    assert upload("198.51.100.4") == 200  # a different visitor
+    assert upload("203.0.113.7") == 429
+    assert upload("1.2.3.4, 203.0.113.7") == 429  # faking an address in front doesn't help

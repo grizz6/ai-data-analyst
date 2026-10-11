@@ -43,7 +43,11 @@ async def limit_request_rate(request: Request, call_next):
             limiter, limit, what = rate_limit.questions, settings.questions_per_hour, "questions"
         else:
             return await call_next(request)
-        visitor = request.client.host if request.client else "unknown"
+        visitor = rate_limit.visitor_address(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            settings.trusted_proxy_hops,
+        )
         wait = limiter.check(visitor, limit)
         if wait is not None:
             return JSONResponse(

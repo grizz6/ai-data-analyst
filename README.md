@@ -18,7 +18,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
 | Tests and CI | 220 backend tests (pytest) and 37 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
-| Deployment | **Not yet deployed.** Runs locally, or as one Docker container (built and smoke-tested in CI) |
+| Deployment | Ready for Hugging Face Spaces: after CI passes on `main`, a workflow pushes the app to a Docker Space (see [Hosting on Hugging Face Spaces](#hosting-on-hugging-face-spaces)). Also runs locally or as one Docker container |
 
 ---
 
@@ -99,6 +99,22 @@ docker run -p 8000:8000 -v ada-data:/app/backend/data ai-data-analyst
 
 The volume keeps stored analyses across container restarts. CI builds the image on every push, starts it, uploads the sample file, downloads the cleaned CSV, restarts the container, and checks the session is still there.
 
+### Hosting on Hugging Face Spaces
+
+`.github/workflows/deploy-space.yml` deploys every commit on `main` that passes CI. It copies the app into the Space as one snapshot commit, adds the header Spaces read their settings from (Docker SDK, port 8000) to the top of the README there, and sets `ADA_TRUSTED_PROXY_HOPS=1` so rate limits see each visitor's address behind the Space's proxy.
+
+One-time setup:
+
+1. On huggingface.co, create a **Space** with the **Docker** SDK (blank template).
+2. Create a **fine-grained** access token with write access to that Space only.
+3. In this GitHub repository, under **Settings → Secrets and variables → Actions**:
+   - add the secret `HF_TOKEN` with that token, and
+   - add the variable `HF_SPACE` with the Space's ID, e.g. `your-username/ai-data-analyst`.
+4. Optional: in the Space's **Settings → Variables and secrets**, add the secret `ADA_LLM_API_KEY` for model-written explanations.
+5. Push to `main`, or run the workflow by hand from the **Actions** tab.
+
+The app is then at `https://<username>-<space-name>.hf.space`. A free Space sleeps after about 48 hours without visitors and takes about a minute to wake; stored analyses don't survive a restart, which matters little since they expire after an hour anyway.
+
 ### Tests
 
 ```bash
@@ -141,6 +157,7 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
 | `ADA_UPLOADS_PER_HOUR` | `10` | Uploads one visitor (IP address) may make in any hour; more get a 429 with `Retry-After`. `0` turns the limit off |
 | `ADA_QUESTIONS_PER_HOUR` | `30` | Same for questions, which are what spend the LLM quota. Counts are kept in memory, per process |
+| `ADA_TRUSTED_PROXY_HOPS` | `0` | Reverse proxies in front of the app. With 1 or more, the visitor's address is read from `X-Forwarded-For` (the entry that many places from the right, which a proxy wrote); with 0 the header is ignored, since a visitor could put anything in it. The Spaces deploy sets 1 |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
@@ -196,7 +213,7 @@ The model layer runs against `httpx.MockTransport` instead of a real provider, w
 ## Known limits
 
 - Results are stored in a local SQLite file, which suits one server; several servers behind a load balancer would need a shared database such as Postgres.
-- Not deployed, and there is no authentication. Uploads and questions are rate-limited per IP address, but behind a reverse proxy Uvicorn must be told to trust its forwarded headers (`--proxy-headers --forwarded-allow-ips`), or every visitor shares the proxy's address and one limit.
+- There is no authentication: anyone with the link can use a deployed copy. Uploads and questions are rate-limited per IP address; behind a reverse proxy, set `ADA_TRUSTED_PROXY_HOPS` to the number of proxies, or every visitor shares the proxy's address and one limit.
 - The LLM path has only been exercised against a fake provider.
 - The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
 

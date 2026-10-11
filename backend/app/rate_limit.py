@@ -61,6 +61,20 @@ class RateLimiter:
                 del self._hits[key]
 
 
+def visitor_address(direct_peer: str | None, forwarded_for: str | None, trusted_hops: int) -> str:
+    """The visitor's IP address, as far as it can be trusted.
+
+    Each trusted proxy appends the address it received the request from, so
+    with N trusted proxies the Nth entry from the right is the visitor's.
+    Entries further left were written by the client and could be anything.
+    """
+    if trusted_hops > 0 and forwarded_for:
+        entries = [e.strip() for e in forwarded_for.split(",") if e.strip()]
+        if entries:
+            return entries[-min(trusted_hops, len(entries))]
+    return direct_peer or "unknown"
+
+
 def retry_after_header(wait_seconds: float) -> str:
     return str(max(1, math.ceil(wait_seconds)))
 
