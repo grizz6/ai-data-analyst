@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
 MAX_RECOMMENDATIONS = 6
 MAX_QUESTION_CHARS = 1_000
+# Earlier questions and answers sent along with a new one, so "what about East?" makes sense.
+MAX_CONTEXT_TURNS = 6
 
 GROUND_RULES = """\
 Rules you must follow:
@@ -63,6 +65,9 @@ ANSWER_SYSTEM_PROMPT = f"""\
 You answer a question about a dataset using only the results of an automated analysis.
 
 {GROUND_RULES}
+
+You may be given the earlier conversation about this dataset. Use it only to understand
+what a follow-up question refers to; the facts remain the only source of figures.
 
 The JSON object must have exactly one key, "answer", holding your answer as a string."""
 
@@ -263,7 +268,13 @@ async def answer_question(
 
     client = client or make_client()
     facts = build_facts(result)
-    user_message = json.dumps({"question": question[:MAX_QUESTION_CHARS], "facts": facts}, default=str)
+    earlier = [
+        {"question": t.question, "answer": t.answer} for t in result.chat_history[-MAX_CONTEXT_TURNS:]
+    ]
+    payload: dict[str, Any] = {"question": question[:MAX_QUESTION_CHARS], "facts": facts}
+    if earlier:
+        payload["earlier_conversation"] = earlier
+    user_message = json.dumps(payload, default=str)
     try:
         reply = await client.chat_json(ANSWER_SYSTEM_PROMPT, user_message)
         parsed = ModelAnswer.model_validate(reply.data)
@@ -272,13 +283,15 @@ async def answer_question(
     except ValidationError:
         return _answer_fallback(result, "model reply was missing the answer")
 
-    # The question itself may contain numbers ("top 3"), so those count as given too.
-    invented = ungrounded_numbers(parsed.answer, {"facts": facts, "question": question})
+    # The questions themselves may contain numbers ("top 3"), so those count as given too.
+    # Earlier answers don't: a number has to come from the facts, not from a past reply.
+    given = {"facts": facts, "question": question, "earlier_questions": [t["question"] for t in earlier]}
+    invented = ungrounded_numbers(parsed.answer, given)
     if invented:
         return _answer_fallback(result, f"model wrote numbers not in the analysis: {', '.join(invented[:5])}")
 
     _log_call("answer", reply, outcome="ok")
-    return QuestionResponse(answer=parsed.answer, configured=True, source="llm")
+    return QuestionResponse(answer=parsed.answer, configured=True, source="llm", model=reply.model)
 
 
 def _explanation_fallback(result: AnalysisResult, reason: str) -> Explanation:

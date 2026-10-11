@@ -25,6 +25,7 @@
     .chart-card { background: var(--card-2); border-radius: 10px; padding: 0.75rem; min-width: 0; }
     .chart-card h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
     .chart { width: 100%; height: 320px; }
+    .qa { margin-bottom: 1rem; } .qa p { margin: 0.25rem 0; } .qa .answer { white-space: pre-wrap; } .qa .src { color: var(--muted); font-size: 0.85rem; }
     @media (max-width: 600px) { body { padding: 1rem; } section { padding: 1rem; } }
   </style>
 </head>
@@ -136,6 +137,19 @@
       {% endfor %}
     </div>
     <noscript><p class="note">Charts need JavaScript and an internet connection to load Plotly.</p></noscript>
+  </section>
+  {% endif %}
+
+  {% if result.chat_history %}
+  <section>
+    <h2>Questions asked</h2>
+    {% for turn in result.chat_history %}
+    <div class="qa">
+      <p><strong>Q:</strong> {{ turn.question }}</p>
+      <p class="answer"><strong>A:</strong> {{ turn.answer }}
+        <span class="src">({% if turn.source == "llm" %}written by {{ turn.model }}{% else %}rule-based{% endif %})</span></p>
+    </div>
+    {% endfor %}
   </section>
   {% endif %}
 

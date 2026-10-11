@@ -45,3 +45,10 @@ def client() -> TestClient:
 @pytest.fixture
 def sample_csv_bytes() -> bytes:
     return SAMPLE_CSV.read_bytes()
+
+
+@pytest.fixture
+def result_for_store():
+    from app.services.pipeline import compute_analysis
+
+    return compute_analysis(SAMPLE_CSV.read_bytes(), "sales_sample.csv")

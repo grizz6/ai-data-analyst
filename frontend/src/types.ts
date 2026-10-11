@@ -12,6 +12,7 @@ type Schemas = components["schemas"];
 export type AnalysisResult = Schemas["AnalysisResult"];
 export type CategoricalSummary = Schemas["CategoricalSummary"];
 export type ChartSpec = Schemas["ChartSpec"];
+export type ChatTurn = Schemas["ChatTurn"];
 export type CleaningAction = Schemas["CleaningAction"];
 export type ColumnProfile = Schemas["ColumnProfile"];
 export type CorrelationPair = Schemas["CorrelationPair"];

@@ -22,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.config import settings
-from app.models.schemas import AnalysisResult
+from app.models.schemas import AnalysisResult, ChatTurn
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,23 @@ class SessionStore:
         result._cleaned_csv = row[1]
         return result
 
+    def add_chat_turn(self, session_id: str, turn: ChatTurn, *, max_turns: int) -> bool:
+        """Append a question and answer to a session, keeping the newest max_turns.
+
+        Done under the lock in one read-modify-write, so two questions answered
+        at once both land. False if the session has gone in the meantime.
+        """
+        with self._lock:
+            row = self._db.execute("SELECT result_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
+            if row is None:
+                return False
+            result = AnalysisResult.model_validate_json(row[0])
+            result.chat_history = [*result.chat_history, turn][-max_turns:]
+            self._db.execute(
+                "UPDATE sessions SET result_json = ? WHERE id = ?", (result.model_dump_json(), session_id)
+            )
+            return True
+
     def delete(self, session_id: str) -> bool:
         with self._lock:
             return self._db.execute("DELETE FROM sessions WHERE id = ?", (session_id,)).rowcount > 0
@@ -140,6 +157,10 @@ def save(result: AnalysisResult) -> None:
 
 def get(session_id: str) -> AnalysisResult | None:
     return store.get(session_id)
+
+
+def add_chat_turn(session_id: str, turn: ChatTurn, *, max_turns: int) -> bool:
+    return store.add_chat_turn(session_id, turn, max_turns=max_turns)
 
 
 def delete(session_id: str) -> bool:

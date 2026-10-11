@@ -96,6 +96,38 @@ describe("AnalysisDashboard", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/sessions/${result.session_id}/ask`);
   });
 
+  it("keeps the thread, clears the box, and shows earlier turns from the session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          answer: "East is lowest.",
+          configured: true,
+          source: "llm",
+          model: "test-model",
+          fallback_reason: null,
+        }),
+      ),
+    );
+    const result = sampleResult({
+      chat_history: [
+        { question: "Which region sells most?", answer: "West.", source: "rule_based", model: null, fallback_reason: null },
+      ],
+    });
+    render(<AnalysisDashboard result={result} />);
+
+    const thread = screen.getByRole("list", { name: "Questions and answers" });
+    expect(within(thread).getByText("West.")).toBeInTheDocument();
+
+    const box = screen.getByRole("textbox", { name: "Your question" });
+    await userEvent.type(box, "And the least?{Control>}{Enter}{/Control}");
+
+    expect(await within(thread).findByText("East is lowest.")).toBeInTheDocument();
+    expect(within(thread).getByText("Written by test-model")).toBeInTheDocument();
+    expect(within(thread).getAllByRole("listitem")).toHaveLength(2);
+    expect(box).toHaveValue("");
+  });
+
   it("shows the server's message when the session has expired", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "This analysis wasn't found." }, 404)));
     render(<AnalysisDashboard result={sampleResult()} />);

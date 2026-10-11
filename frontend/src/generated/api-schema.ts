@@ -135,6 +135,8 @@ export interface components {
             categorical_summaries: components["schemas"]["CategoricalSummary"][];
             /** Charts */
             charts: components["schemas"]["ChartSpec"][];
+            /** Chat History */
+            chat_history: components["schemas"]["ChatTurn"][];
             /** Cleaned Preview Rows */
             cleaned_preview_rows: Record<string, unknown>[];
             /** Cleaning Actions */
@@ -190,6 +192,26 @@ export interface components {
             plotly_json: Record<string, unknown>;
             /** Title */
             title: string;
+        };
+        /**
+         * ChatTurn
+         * @description One question asked about an analysis, and the answer it got.
+         */
+        ChatTurn: {
+            /** Answer */
+            answer: string;
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Model */
+            model: string | null;
+            /** Question */
+            question: string;
+            /**
+             * Source
+             * @default rule_based
+             * @enum {string}
+             */
+            source: "rule_based" | "llm";
         };
         /** CleaningAction */
         CleaningAction: {
@@ -323,6 +345,8 @@ export interface components {
             configured: boolean;
             /** Fallback Reason */
             fallback_reason: string | null;
+            /** Model */
+            model: string | null;
             /**
              * Source
              * @default rule_based

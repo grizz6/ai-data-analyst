@@ -118,6 +118,16 @@ class ModelAnswer(ApiModel):
     answer: str = Field(min_length=1)
 
 
+class ChatTurn(ApiModel):
+    """One question asked about an analysis, and the answer it got."""
+
+    question: str
+    answer: str
+    source: ExplanationSource = "rule_based"
+    model: str | None = None
+    fallback_reason: str | None = None
+
+
 class AnalysisResult(ApiModel):
     session_id: str
     filename: str
@@ -137,6 +147,9 @@ class AnalysisResult(ApiModel):
     explanation: Explanation
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
+    # Questions asked so far, oldest first. Kept with the session, so the thread
+    # survives a reload and earlier answers give follow-up questions context.
+    chat_history: list[ChatTurn] = Field(default_factory=list)
 
     # The full cleaned dataset as CSV, kept with the session for download but
     # left out of the JSON response, which only carries a preview.
@@ -155,4 +168,5 @@ class QuestionResponse(ApiModel):
     answer: str
     configured: bool = False
     source: ExplanationSource = "rule_based"
+    model: str | None = None
     fallback_reason: str | None = None
