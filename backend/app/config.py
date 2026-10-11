@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     app_name: str = "AI Data Analyst Agent"
     max_upload_mb: int = 10
     max_excel_unzipped_mb: int = 100
+    # Wider files are refused: memory and result size grow with the square of
+    # the column count (the correlation grid), and 3,000 columns needs over 1 GB.
+    max_columns: int = 200
+    # Analyses and custom charts run this many at a time; others wait up to
+    # analysis_queue_wait_seconds, then get a "busy" message (see app/workload.py).
+    max_concurrent_analyses: int = 1
+    analysis_queue_wait_seconds: float = 60
     missing_threshold_drop: float = 0.9
     # Built React app to serve at "/", if present (see app/frontend.py).
     frontend_dist: str = str(BACKEND_DIR.parent / "frontend" / "dist")

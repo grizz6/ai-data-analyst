@@ -15,6 +15,7 @@ from app.services import (
     semantics,
 )
 from app.services.ingestion import df_preview_records
+from app.workload import run_in_slot
 
 
 async def run_full_analysis(
@@ -23,7 +24,7 @@ async def run_full_analysis(
     # Pandas work is CPU-bound and would block every other request if run on
     # the event loop, so it runs in a worker thread. Only the explanation
     # step, which waits on network I/O, runs on the loop.
-    result = await run_in_threadpool(compute_analysis, file_bytes, filename, sheet)
+    result = await run_in_threadpool(run_in_slot, compute_analysis, file_bytes, filename, sheet)
     summary = await explanation.explain_analysis(result)
     return result.model_copy(update={"explanation": summary})
 

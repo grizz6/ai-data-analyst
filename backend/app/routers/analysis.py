@@ -21,6 +21,7 @@ from app.services import custom_charts, explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import add_chat_turn, get, save
+from app.workload import BusyError, busy_detail, run_in_slot
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -88,6 +89,8 @@ async def upload_dataset(
     except DatasetError as exc:
         # Our own messages about the file itself, written for the user.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except BusyError as exc:
+        raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
     except Exception as exc:
         # Anything else is a bug. The exception text can hold paths or data
         # values, so it goes to the log under a reference, not to the client.
@@ -138,9 +141,11 @@ async def build_chart(session_id: str, body: CustomChartRequest):
         return custom_charts.build_custom_chart(df, body)
 
     try:
-        return await run_in_threadpool(build)
+        return await run_in_threadpool(run_in_slot, build)
     except custom_charts.ChartRequestError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except BusyError as exc:
+        raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
 
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)

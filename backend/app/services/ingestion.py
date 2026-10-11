@@ -42,6 +42,12 @@ def load_table(file_bytes: bytes, filename: str, sheet: str | None = None) -> Lo
     else:
         raise DatasetError("Unsupported file type. Upload CSV or Excel (.xlsx, .xls).")
 
+    columns = len(table.df.columns)
+    if columns > settings.max_columns:
+        raise DatasetError(
+            f"This file has {columns:,} columns; the limit is {settings.max_columns}. "
+            "Remove columns you don't need, or split the file, and upload it again."
+        )
     table.df.columns = [str(c).strip() for c in table.df.columns]
     return table
 
