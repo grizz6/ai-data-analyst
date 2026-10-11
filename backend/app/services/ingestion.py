@@ -1,9 +1,11 @@
 import csv
 import zipfile
 from dataclasses import dataclass, field
-from io import BytesIO, StringIO
+from io import BytesIO
 from pathlib import Path
+from typing import BinaryIO
 
+import numpy as np
 import pandas as pd
 
 from app.config import settings
@@ -14,7 +16,14 @@ from app.utils.json_compat import sanitize_for_json
 # so it is the last resort.
 CSV_ENCODINGS = ("utf-8-sig", "cp1252", "latin-1")
 CSV_DELIMITERS = ",;\t|"
-SNIFF_SAMPLE_CHARS = 64_000
+SNIFF_SAMPLE_BYTES = 256 * 1024
+# Large CSVs are read this many rows at a time, so the whole file is never in memory.
+CSV_CHUNK_ROWS = 50_000
+# Fixed so the same file always gives the same sample, and so the same results.
+SAMPLE_SEED = 20240501
+
+# An upload arrives either as bytes or as the file the web framework spooled to disk.
+Source = bytes | BinaryIO
 
 
 class DatasetError(ValueError):
@@ -26,19 +35,35 @@ class LoadedTable:
     df: pd.DataFrame
     sheet: str | None = None
     available_sheets: list[str] = field(default_factory=list)
+    # Data rows in the file. When it's more than ADA_MAX_ANALYSIS_ROWS, df holds a
+    # random sample of that many rows, in file order, keeping their row numbers.
+    total_rows: int = 0
+
+    @property
+    def sampled(self) -> bool:
+        return self.total_rows > len(self.df)
 
 
-def load_dataframe(file_bytes: bytes, filename: str, sheet: str | None = None) -> pd.DataFrame:
-    return load_table(file_bytes, filename, sheet).df
+def load_dataframe(source: Source, filename: str, sheet: str | None = None) -> pd.DataFrame:
+    return load_table(source, filename, sheet).df
 
 
-def load_table(file_bytes: bytes, filename: str, sheet: str | None = None) -> LoadedTable:
+def load_table(source: Source, filename: str, sheet: str | None = None) -> LoadedTable:
     suffix = Path(filename).suffix.lower()
 
     if suffix == ".csv":
-        table = LoadedTable(df=_read_csv(file_bytes))
+        df, total_rows = _read_csv(_as_stream(source))
+        table = LoadedTable(df=df, total_rows=total_rows)
     elif suffix in {".xlsx", ".xls"}:
-        table = _read_excel(file_bytes, sheet)
+        data = source if isinstance(source, bytes) else _as_stream(source).read()
+        if len(data) > settings.max_excel_bytes:
+            raise DatasetError(
+                f"Excel files can be up to {settings.max_excel_mb} MB, since a workbook has to be opened "
+                f"whole. Save the sheet as CSV (up to {settings.max_upload_mb} MB) and upload that instead."
+            )
+        table = _read_excel(data, sheet)
+        table.total_rows = len(table.df)
+        table.df = _sample_rows(table.df)
     else:
         raise DatasetError("Unsupported file type. Upload CSV or Excel (.xlsx, .xls).")
 
@@ -52,18 +77,58 @@ def load_table(file_bytes: bytes, filename: str, sheet: str | None = None) -> Lo
     return table
 
 
-def _read_csv(file_bytes: bytes) -> pd.DataFrame:
-    text = _decode(file_bytes)
-    if not text.strip():
+def _as_stream(source: Source) -> BinaryIO:
+    if isinstance(source, bytes):
+        return BytesIO(source)
+    source.seek(0)
+    return source
+
+
+def _read_csv(stream: BinaryIO) -> tuple[pd.DataFrame, int]:
+    """The rows to analyze (all of them, or a sample of large files) and the file's row count."""
+    head = stream.read(SNIFF_SAMPLE_BYTES)
+    if not head.strip():
         raise DatasetError("The file is empty.")
 
-    try:
-        delimiter = csv.Sniffer().sniff(text[:SNIFF_SAMPLE_CHARS], delimiters=CSV_DELIMITERS).delimiter
-    except csv.Error:
-        delimiter = ","
+    # A wrong guess at the encoding can surface anywhere in the file, so each
+    # attempt reads it to the end. latin-1 accepts any byte, so the loop ends.
+    for encoding in CSV_ENCODINGS:
+        stream.seek(0)
+        try:
+            # The sample can end mid-character; that only matters for sniffing.
+            delimiter = _sniff_delimiter(head.decode(encoding, errors="ignore"))
+            return _sample_csv(stream, encoding, delimiter)
+        except UnicodeDecodeError:
+            continue
+    raise DatasetError("The file's text encoding couldn't be read.")
 
+
+def _sniff_delimiter(text: str) -> str:
     try:
-        return pd.read_csv(StringIO(text), sep=delimiter)
+        return csv.Sniffer().sniff(text, delimiters=CSV_DELIMITERS).delimiter
+    except csv.Error:
+        return ","
+
+
+def _sample_csv(stream: BinaryIO, encoding: str, delimiter: str) -> tuple[pd.DataFrame, int]:
+    """Read in chunks, keeping a uniform random sample of at most ADA_MAX_ANALYSIS_ROWS rows.
+
+    Every row gets a random key and the rows with the smallest keys are kept,
+    which samples evenly across the whole file without knowing its length.
+    """
+    limit = settings.max_analysis_rows
+    rng = np.random.default_rng(SAMPLE_SEED)
+    kept: pd.DataFrame | None = None
+    keys: np.ndarray = np.empty(0)
+    total = 0
+    try:
+        for chunk in pd.read_csv(stream, sep=delimiter, encoding=encoding, chunksize=CSV_CHUNK_ROWS):
+            total += len(chunk)
+            kept = chunk if kept is None else pd.concat([kept, chunk])
+            keys = np.concatenate([keys, rng.random(len(chunk))])
+            if len(kept) > limit:
+                keep = np.sort(np.argpartition(keys, limit)[:limit])
+                kept, keys = kept.iloc[keep], keys[keep]
     except pd.errors.EmptyDataError as exc:
         raise DatasetError("The file has no columns to read.") from exc
     except pd.errors.ParserError as exc:
@@ -71,14 +136,16 @@ def _read_csv(file_bytes: bytes) -> pd.DataFrame:
             "The CSV couldn't be parsed. Check that every row has the same number of fields."
         ) from exc
 
+    if kept is None:  # a header and no rows
+        stream.seek(0)
+        kept = pd.read_csv(stream, sep=delimiter, encoding=encoding, nrows=0)
+    return kept.sort_index(), total
 
-def _decode(file_bytes: bytes) -> str:
-    for encoding in CSV_ENCODINGS:
-        try:
-            return file_bytes.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    raise DatasetError("The file's text encoding couldn't be read.")  # unreachable: latin-1 decodes anything
+
+def _sample_rows(df: pd.DataFrame) -> pd.DataFrame:
+    if len(df) <= settings.max_analysis_rows:
+        return df
+    return df.sample(n=settings.max_analysis_rows, random_state=SAMPLE_SEED).sort_index()
 
 
 def _check_unzipped_size(file_bytes: bytes) -> None:

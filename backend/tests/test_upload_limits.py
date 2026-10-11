@@ -28,8 +28,9 @@ def upload(client, content: bytes, headers=None):
     )
 
 
-def test_default_cap_is_ten_megabytes(client):
-    assert client.get("/api/health").json()["max_upload_mb"] == 10
+def test_default_caps_are_reported(client):
+    health = client.get("/api/health").json()
+    assert (health["max_upload_mb"], health["max_excel_mb"], health["max_analysis_rows"]) == (75, 15, 100_000)
 
 
 def test_declared_size_over_cap_is_refused_before_reading(client, one_mb_cap):

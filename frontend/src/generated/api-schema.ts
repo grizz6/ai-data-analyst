@@ -203,8 +203,18 @@ export interface components {
             quality_issues: components["schemas"]["QualityIssue"][];
             /** Row Count */
             row_count: number;
+            /**
+             * Rows In File
+             * @default 0
+             */
+            rows_in_file: number;
             /** Rule Insights */
             rule_insights: components["schemas"]["RuleInsight"][];
+            /**
+             * Sampled
+             * @default false
+             */
+            sampled: boolean;
             /** Session Id */
             session_id: string;
             /** Sheet Name */

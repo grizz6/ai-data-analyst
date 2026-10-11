@@ -3,7 +3,7 @@ import logging
 import re
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, BinaryIO
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -82,12 +82,21 @@ async def upload_dataset(
             detail="Unsupported file type. Use CSV or Excel (.csv, .xlsx, .xls).",
         )
 
-    content = await read_capped(file, settings.max_upload_bytes)
-    if not content:
+    # The framework has already spooled the upload to a temporary file, so large
+    # files are analyzed from there rather than copied into memory.
+    source: bytes | BinaryIO
+    if file.size is None:
+        source = await read_capped(file, settings.max_upload_bytes)
+        size = len(source)
+    else:
+        source, size = file.file, file.size
+        if size > settings.max_upload_bytes:
+            raise HTTPException(status_code=413, detail=too_large_detail())
+    if size == 0:
         raise HTTPException(status_code=400, detail="The file is empty.")
 
     try:
-        result = await run_full_analysis(content, file.filename, sheet)
+        result = await run_full_analysis(source, file.filename, sheet)
     except DatasetError as exc:
         # Our own messages about the file itself, written for the user.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -231,4 +240,6 @@ async def health():
         "llm_configured": explanation.is_llm_configured(),
         "llm_model": settings.llm_model if explanation.is_llm_configured() else None,
         "max_upload_mb": settings.max_upload_mb,
+        "max_excel_mb": settings.max_excel_mb,
+        "max_analysis_rows": settings.max_analysis_rows,
     }

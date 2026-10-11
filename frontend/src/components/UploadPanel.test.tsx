@@ -6,8 +6,11 @@ import UploadPanel from "./UploadPanel";
 
 const MB = 1024 * 1024;
 
-function renderPanel(serverLimitMb = 1) {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ max_upload_mb: serverLimitMb })));
+function renderPanel(serverLimitMb = 1, excelLimitMb = 1) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(jsonResponse({ max_upload_mb: serverLimitMb, max_excel_mb: excelLimitMb })),
+  );
   const onUpload = vi.fn();
   const onReject = vi.fn();
   render(<UploadPanel onUpload={onUpload} onReject={onReject} loading={false} />);
@@ -15,14 +18,25 @@ function renderPanel(serverLimitMb = 1) {
 }
 
 describe("UploadPanel", () => {
-  it("shows the upload limit the server reports", async () => {
-    renderPanel(3);
-    expect(await screen.findByText(/Max 3 MB/)).toBeInTheDocument();
+  it("shows the upload limits the server reports", async () => {
+    renderPanel(3, 2);
+    expect(await screen.findByText(/CSV up to 3 MB, Excel up to 2 MB/)).toBeInTheDocument();
+  });
+
+  it("holds Excel files to their own, lower limit", async () => {
+    const { onUpload, onReject } = renderPanel(3, 1);
+    await screen.findByText(/CSV up to 3 MB/);
+    const workbook = new File([new Uint8Array(MB + 1)], "book.xlsx");
+
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), workbook);
+
+    await waitFor(() => expect(onReject).toHaveBeenCalledWith(expect.stringMatching(/^Excel files can be up to 1 MB/)));
+    expect(onUpload).not.toHaveBeenCalled();
   });
 
   it("uploads a file that fits under the limit", async () => {
     const { onUpload, onReject } = renderPanel(1);
-    await screen.findByText(/Max 1 MB/);
+    await screen.findByText(/CSV up to 1 MB/);
     const file = new File(["a,b\n1,2\n"], "small.csv", { type: "text/csv" });
 
     await userEvent.upload(screen.getByLabelText("CSV or Excel file"), file);
@@ -33,7 +47,7 @@ describe("UploadPanel", () => {
 
   it("refuses an oversized file before sending it", async () => {
     const { onUpload, onReject } = renderPanel(1);
-    await screen.findByText(/Max 1 MB/);
+    await screen.findByText(/CSV up to 1 MB/);
     const big = new File([new Uint8Array(MB + 1)], "big.csv", { type: "text/csv" });
 
     await userEvent.upload(screen.getByLabelText("CSV or Excel file"), big);

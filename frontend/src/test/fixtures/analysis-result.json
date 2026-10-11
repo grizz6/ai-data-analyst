@@ -329,5 +329,7 @@
       "units": 135
     }
   ],
-  "chat_history": []
+  "chat_history": [],
+  "rows_in_file": 31,
+  "sampled": false
 }

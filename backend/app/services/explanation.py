@@ -91,6 +91,8 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
             "name": result.filename,
             "sheet": result.sheet_name,
             "rows_after_cleaning": result.row_count,
+            "rows_in_file": result.rows_in_file,
+            "analyzed_a_random_sample": result.sampled,
             "columns_after_cleaning": result.column_count,
         },
         "columns": [

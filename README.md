@@ -144,10 +144,12 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 
 | Variable | Default | Effect |
 |---|---|---|
-| `ADA_MAX_UPLOAD_MB` | `10` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
+| `ADA_MAX_UPLOAD_MB` | `75` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
+| `ADA_MAX_EXCEL_MB` | `15` | Lower limit for Excel, which has to be opened whole; larger workbooks are asked to be saved as CSV |
+| `ADA_MAX_ANALYSIS_ROWS` | `100000` | Files with more rows are analyzed on a random sample of this many, drawn evenly across the file in fixed-size chunks so the whole file is never in memory. The dashboard, report and model all say when a sample was used |
 | `ADA_MAX_EXCEL_UNZIPPED_MB` | `100` | An `.xlsx` is a zip archive; one that would expand past this once opened is refused before parsing, so a small upload can't unpack into gigabytes |
 | `ADA_MAX_COLUMNS` | `200` | Files with more columns are refused with a plain message. Memory and result size grow with the square of the column count: 3,000 columns took over 1 GB, more than a free host has |
-| `ADA_MAX_CONCURRENT_ANALYSES` | `1` | Analyses and custom charts that run at once. A 10 MB file peaks around 300–370 MB, so one at a time fits a 512 MB free instance |
+| `ADA_MAX_CONCURRENT_ANALYSES` | `1` | Analyses and custom charts that run at once. A 74 MB CSV, read in chunks and sampled to 100,000 rows, peaks around 310 MB, so one at a time fits a 512 MB free instance |
 | `ADA_ANALYSIS_QUEUE_WAIT_SECONDS` | `60` | How long a request waits for a free slot before getting a 503 "busy, try again" |
 | `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
 | `ADA_FRONTEND_DIST` | `frontend/dist` | Built frontend to serve at `/`; if it isn't there, `/` just points at `/docs` |

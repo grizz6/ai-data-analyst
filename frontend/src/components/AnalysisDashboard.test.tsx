@@ -53,6 +53,11 @@ describe("AnalysisDashboard", () => {
     expect(within(date).getByText("Date")).toBeInTheDocument();
   });
 
+  it("says when a large file was analyzed on a sample", () => {
+    render(<AnalysisDashboard result={sampleResult({ row_count: 100_000, rows_in_file: 694_646, sampled: true })} />);
+    expect(screen.getByText(/Sample of 100,000 of 694,646 rows/)).toBeInTheDocument();
+  });
+
   it("opens a collapsed section when its jump link is used", async () => {
     render(<AnalysisDashboard result={sampleResult()} />);
     const columns = document.getElementById("columns") as HTMLDetailsElement;

@@ -15,7 +15,12 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "AI Data Analyst Agent"
-    max_upload_mb: int = 10
+    max_upload_mb: int = 75
+    # Excel has to be opened whole (it's a zip archive), so it gets a lower cap.
+    max_excel_mb: int = 15
+    # Larger files are analyzed on a random sample of this many rows, which keeps
+    # memory and time in check on a small server. Statistics then describe the sample.
+    max_analysis_rows: int = 100_000
     max_excel_unzipped_mb: int = 100
     # Wider files are refused: memory and result size grow with the square of
     # the column count (the correlation grid), and 3,000 columns needs over 1 GB.
@@ -59,6 +64,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_excel_bytes(self) -> int:
+        return self.max_excel_mb * 1024 * 1024
 
     @property
     def llm_configured(self) -> bool:

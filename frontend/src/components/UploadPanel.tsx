@@ -10,13 +10,15 @@ interface Props {
 export default function UploadPanel({ onUpload, onReject, loading }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragover, setDragover] = useState(false);
-  const [maxUploadMb, setMaxUploadMb] = useState(10);
+  const [maxUploadMb, setMaxUploadMb] = useState(75);
+  const [maxExcelMb, setMaxExcelMb] = useState(15);
 
   useEffect(() => {
     fetch("/api/health")
       .then((r) => r.json())
-      .then((data: { max_upload_mb?: number }) => {
+      .then((data: { max_upload_mb?: number; max_excel_mb?: number }) => {
         if (data.max_upload_mb) setMaxUploadMb(data.max_upload_mb);
+        if (data.max_excel_mb) setMaxExcelMb(data.max_excel_mb);
       })
       .catch(() => {});
   }, []);
@@ -24,14 +26,19 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
   const handleFile = useCallback(
     (file: File | undefined) => {
       if (!file || loading) return;
-      // Same limit the server enforces; checking here saves sending a file that will be refused.
+      // Same limits the server enforces; checking here saves sending a file that will be refused.
+      const isExcel = /\.xlsx?$/i.test(file.name);
+      if (isExcel && file.size > maxExcelMb * 1024 * 1024) {
+        onReject(`Excel files can be up to ${maxExcelMb} MB. Save the sheet as CSV (up to ${maxUploadMb} MB) instead.`);
+        return;
+      }
       if (file.size > maxUploadMb * 1024 * 1024) {
         onReject(`File exceeds the ${maxUploadMb} MB upload limit.`);
         return;
       }
       onUpload(file);
     },
-    [loading, maxUploadMb, onReject, onUpload]
+    [loading, maxExcelMb, maxUploadMb, onReject, onUpload]
   );
 
   return (
@@ -83,7 +90,8 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
         </button>
       </p>
       <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--muted)" }}>
-        Max {maxUploadMb} MB · Analysis runs in Python (Pandas) on the server
+        CSV up to {maxUploadMb} MB, Excel up to {maxExcelMb} MB · Very large files are analyzed on a
+        random sample of rows
       </p>
     </div>
   );

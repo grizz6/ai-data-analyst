@@ -19,19 +19,19 @@ from app.workload import run_in_slot
 
 
 async def run_full_analysis(
-    file_bytes: bytes, filename: str, sheet: str | None = None
+    source: ingestion.Source, filename: str, sheet: str | None = None
 ) -> AnalysisResult:
     # Pandas work is CPU-bound and would block every other request if run on
     # the event loop, so it runs in a worker thread. Only the explanation
     # step, which waits on network I/O, runs on the loop.
-    result = await run_in_threadpool(run_in_slot, compute_analysis, file_bytes, filename, sheet)
+    result = await run_in_threadpool(run_in_slot, compute_analysis, source, filename, sheet)
     summary = await explanation.explain_analysis(result)
     return result.model_copy(update={"explanation": summary})
 
 
-def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None) -> AnalysisResult:
+def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None = None) -> AnalysisResult:
     """Every number in the result is computed here, synchronously."""
-    table = ingestion.load_table(file_bytes, filename, sheet)
+    table = ingestion.load_table(source, filename, sheet)
     raw_df = table.df
     identifiers = semantics.identifier_columns(raw_df)
     quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
@@ -60,6 +60,19 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
         trends,
         identifiers=identifiers,
     )
+    if table.sampled:
+        rule_insights.insert(
+            1,
+            RuleInsight(
+                category="overview",
+                title="Sample",
+                message=(
+                    f"The file has {table.total_rows:,} rows, so a random sample of {len(raw_df):,} rows, "
+                    "spread evenly across the file, was analyzed. Every figure describes that sample."
+                ),
+                severity="warning",
+            ),
+        )
     other_sheets = [s for s in table.available_sheets if s != table.sheet]
     if other_sheets:
         rule_insights.insert(
@@ -89,6 +102,8 @@ def compute_analysis(file_bytes: bytes, filename: str, sheet: str | None = None)
         available_sheets=table.available_sheets,
         row_count=len(prepared_df),
         column_count=len(prepared_df.columns),
+        rows_in_file=table.total_rows,
+        sampled=table.sampled,
         columns=columns,
         quality_issues=quality_issues,
         cleaning_actions=cleaning_actions,

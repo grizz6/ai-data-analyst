@@ -149,6 +149,10 @@ class AnalysisResult(ApiModel):
     available_sheets: list[str] = Field(default_factory=list)
     row_count: int
     column_count: int
+    # Rows in the uploaded file. Larger than the rows analyzed when a big file was
+    # analyzed on a random sample (sampled is then true); every figure describes the sample.
+    rows_in_file: int = 0
+    sampled: bool = False
     columns: list[ColumnProfile]
     quality_issues: list[QualityIssue]
     cleaning_actions: list[CleaningAction]

@@ -124,7 +124,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           <div>
             <h1 className="file-name">{result.filename}</h1>
             <p className="muted small">
-              {result.row_count.toLocaleString()} rows · {result.column_count} columns
+              {result.sampled
+                ? `Sample of ${result.row_count.toLocaleString()} of ${result.rows_in_file.toLocaleString()} rows`
+                : `${result.row_count.toLocaleString()} rows`}{" "}
+              · {result.column_count} columns
               {result.sheet_name && (
                 <>
                   {" "}· Sheet{" "}
