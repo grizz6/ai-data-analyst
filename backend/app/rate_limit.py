@@ -96,3 +96,4 @@ def describe_wait(wait_seconds: float) -> str:
 
 uploads = RateLimiter()
 questions = RateLimiter()
+charts = RateLimiter()

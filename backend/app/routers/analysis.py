@@ -1,3 +1,4 @@
+import functools
 import logging
 import re
 import uuid
@@ -8,6 +9,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
+from app import security
 from app.config import settings
 from app.models.schemas import (
     AnalysisResult,
@@ -157,10 +159,11 @@ async def download_report(
     ] = False,
 ):
     result = session_or_404(session_id)
+    nonce = security.new_nonce() if print_view else ""
     # Serializing every chart into the template takes real CPU on big results.
-    html = await run_in_threadpool(lambda: report.render_html_report(result, for_print=print_view))
+    html = await run_in_threadpool(lambda: report.render_html_report(result, for_print=print_view, nonce=nonce))
     if print_view:
-        return HTMLResponse(content=html)
+        return HTMLResponse(content=html, headers={"Content-Security-Policy": security.report_csp(nonce)})
     return HTMLResponse(
         content=html,
         headers={
@@ -185,6 +188,23 @@ def cleaned_filename(original: str) -> str:
     """'Q3 sales (final).xlsx' -> 'Q3-sales-final-cleaned.csv', safe inside a header."""
     stem = re.sub(r"[^A-Za-z0-9._-]+", "-", Path(original).stem).strip("-.") or "data"
     return f"{stem}-cleaned.csv"
+
+
+@functools.cache
+def _plotly_js() -> bytes:
+    from plotly.offline import get_plotlyjs
+
+    return get_plotlyjs().encode("utf-8")
+
+
+@router.get("/vendor/plotly.min.js", include_in_schema=False)
+async def plotly_js():
+    """Plotly for the printable report, served from here so the page makes no third-party requests."""
+    return Response(
+        content=_plotly_js(),
+        media_type="text/javascript; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
 
 
 @router.get("/sample.csv", response_class=FileResponse)

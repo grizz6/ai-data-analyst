@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
   <title>Data Analysis Report: {{ result.filename }}</title>
   <style>
     :root { --bg: #0f1419; --card: #1a2332; --card-2: #212c3d; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --warn: #f59e0b; --error: #f87171; }
@@ -182,9 +183,9 @@
   </section>
 
   {% if result.charts %}
-  <script src="https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js" charset="utf-8"></script>
+  <script src="{{ plotly_src }}" charset="utf-8"></script>
   {% endif %}
-  <script>
+  <script{% if nonce %} nonce="{{ nonce }}"{% endif %}>
     (function () {
       var drawn = [];
       {% if result.charts %}

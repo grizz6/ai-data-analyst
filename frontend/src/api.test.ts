@@ -61,3 +61,16 @@ describe("download URLs", () => {
     expect(cleanedCsvUrl("abc")).toBe("/api/sessions/abc/cleaned.csv");
   });
 });
+
+describe("error messages", () => {
+  it("shows the server's sentence, but not a validation error list", async () => {
+    stubFetch(jsonResponse({ detail: "Too many questions: the limit is 30 per hour." }, 429));
+    await expect(askQuestion("s", "q")).rejects.toThrow("Too many questions: the limit is 30 per hour.");
+
+    stubFetch(jsonResponse({ detail: [{ loc: ["body", "question"], msg: "too long" }] }, 422));
+    await expect(askQuestion("s", "q")).rejects.toThrow("Question failed");
+
+    stubFetch(new Response("<html>Bad gateway</html>", { status: 502 }));
+    await expect(uploadDataset(file)).rejects.toThrow("Upload failed");
+  });
+});

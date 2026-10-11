@@ -127,8 +127,8 @@ class CustomChartRequest(ApiModel):
     """
 
     chart_type: Literal["histogram", "bar", "scatter", "line", "box"]
-    x: str | None = None
-    y: str | None = None
+    x: str | None = Field(default=None, max_length=500)
+    y: str | None = Field(default=None, max_length=500)
     aggregate: Literal["count", "sum", "mean", "median"] = "count"
 
 
@@ -181,7 +181,7 @@ class AnalysisResult(ApiModel):
 
 
 class QuestionRequest(ApiModel):
-    question: str
+    question: str = Field(max_length=2_000)
 
 
 class QuestionResponse(ApiModel):

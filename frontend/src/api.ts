@@ -1,5 +1,12 @@
 import type { AnalysisResult, ChartSpec, CustomChartRequest, QuestionResponse } from "./types";
 
+/** The server's message for a failed request, or `fallback` when it sent none worth showing. */
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null);
+  // Our own errors carry a sentence; validation errors (422) carry a list meant for developers.
+  return typeof body?.detail === "string" ? body.detail : fallback;
+}
+
 export async function uploadDataset(file: File, sheet?: string): Promise<AnalysisResult> {
   const form = new FormData();
   form.append("file", file);
@@ -7,8 +14,7 @@ export async function uploadDataset(file: File, sheet?: string): Promise<Analysi
   const query = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
   const res = await fetch(`/api/upload${query}`, { method: "POST", body: form });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Upload failed");
+    throw new Error(await errorMessage(res, "Upload failed"));
   }
   return res.json();
 }
@@ -17,8 +23,7 @@ export async function uploadDataset(file: File, sheet?: string): Promise<Analysi
 export async function getSession(sessionId: string): Promise<AnalysisResult> {
   const res = await fetch(`/api/sessions/${sessionId}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Couldn't open that analysis");
+    throw new Error(await errorMessage(res, "Couldn't open that analysis"));
   }
   return res.json();
 }
@@ -33,8 +38,7 @@ export async function askQuestion(
     body: JSON.stringify({ question }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail ?? "Question failed");
+    throw new Error(await errorMessage(res, "Question failed"));
   }
   return res.json();
 }
@@ -46,8 +50,7 @@ export async function buildChart(sessionId: string, request: CustomChartRequest)
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Chart failed");
+    throw new Error(await errorMessage(res, "Chart failed"));
   }
   return res.json();
 }

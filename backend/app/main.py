@@ -3,16 +3,25 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app import rate_limit
+from app import rate_limit, security
 from app.config import settings
 from app.frontend import mount_frontend
 from app.routers import analysis
 
 # Multipart wraps the file in boundaries and part headers; allow for that on top of the cap.
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
+# Every request other than an upload is a small JSON body (a question, a chart choice).
+MAX_JSON_BODY_BYTES = 64 * 1024
 
-app = FastAPI(title=settings.app_name, version="0.1.0")
+app = FastAPI(
+    title=settings.app_name,
+    version="0.1.0",
+    docs_url="/docs" if settings.api_docs else None,
+    redoc_url="/redoc" if settings.api_docs else None,
+    openapi_url="/openapi.json" if settings.api_docs else None,
+)
 
 
 # Registered before CORS so CORS wraps it and a 413 still reaches the browser readable.
@@ -23,11 +32,17 @@ async def reject_oversized_uploads(request: Request, call_next):
     FastAPI parses the whole multipart body before the endpoint runs, so the
     size check has to happen here to save the server from receiving it.
     """
-    if request.method == "POST" and request.url.path == "/api/upload":
+    if request.method in ("POST", "PUT", "PATCH"):
+        is_upload = request.url.path == "/api/upload"
+        limit = settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES if is_upload else MAX_JSON_BODY_BYTES
         declared = request.headers.get("content-length")
         if declared and declared.isdigit():
-            if int(declared) > settings.max_upload_bytes + MULTIPART_OVERHEAD_BYTES:
-                return JSONResponse(status_code=413, content={"detail": analysis.too_large_detail()})
+            if int(declared) > limit:
+                detail = analysis.too_large_detail() if is_upload else "Request body is too large."
+                return JSONResponse(status_code=413, content={"detail": detail})
+        elif not is_upload:
+            # Without a length the body could be any size; every client this app has sends one.
+            return JSONResponse(status_code=411, content={"detail": "Content-Length is required."})
     return await call_next(request)
 
 
@@ -41,6 +56,8 @@ async def limit_request_rate(request: Request, call_next):
             limiter, limit, what = rate_limit.uploads, settings.uploads_per_hour, "uploads"
         elif path.startswith("/api/sessions/") and path.endswith("/ask"):
             limiter, limit, what = rate_limit.questions, settings.questions_per_hour, "questions"
+        elif path.startswith("/api/sessions/") and path.endswith("/charts"):
+            limiter, limit, what = rate_limit.charts, settings.custom_charts_per_hour, "chart builds"
         else:
             return await call_next(request)
         visitor = rate_limit.visitor_address(
@@ -62,6 +79,25 @@ async def limit_request_rate(request: Request, call_next):
     return await call_next(request)
 
 
+class SecurityHeaders:
+    """Outermost layer, so every response gets the headers: errors, static files, the 413s above."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                security.add_security_headers(scope["path"], message)
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -69,6 +105,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Added last, so it wraps everything else.
+app.add_middleware(SecurityHeaders)
 
 app.include_router(analysis.router)
 

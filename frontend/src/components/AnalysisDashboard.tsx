@@ -368,6 +368,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         <div className="qa-box">
           <textarea
             aria-label="Your question"
+            maxLength={2000}
             placeholder={
               thread.length > 0
                 ? "Ask a follow-up…"

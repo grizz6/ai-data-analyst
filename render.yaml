@@ -16,6 +16,9 @@ services:
       # address, so per-visitor rate limits can't be dodged by faking one.
       - key: ADA_CLIENT_IP_HEADER
         value: true-client-ip
+      # The public site doesn't need the interactive API docs at /docs.
+      - key: ADA_API_DOCS
+        value: "false"
       # Optional: a key for model-written explanations. Render asks for the
       # value when the Blueprint is created; leave it empty for rule-based text.
       - key: ADA_LLM_API_KEY

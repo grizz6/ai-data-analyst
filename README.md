@@ -158,6 +158,8 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_QUESTIONS_PER_HOUR` | `30` | Same for questions, which are what spend the LLM quota. Counts are kept in memory, per process |
 | `ADA_CLIENT_IP_HEADER` | empty | A header the hosting edge overwrites with the visitor's address, used for rate limits when present. `render.yaml` sets `true-client-ip` |
 | `ADA_TRUSTED_PROXY_HOPS` | `0` | For hosts without such a header: the number of reverse proxies that append to `X-Forwarded-For`, so the visitor's address is the entry that many places from the right. With 0 the header is ignored, since a visitor could put anything in it |
+| `ADA_CUSTOM_CHARTS_PER_HOUR` | `120` | Custom chart builds one visitor may make in an hour |
+| `ADA_API_DOCS` | `true` | Serve the interactive API docs at `/docs` and `/redoc`. `render.yaml` turns them off |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
 | `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
@@ -209,6 +211,16 @@ Problems with the file itself (empty, unreadable, bad sheet name) return 400 wit
 `frontend/src/` tests run in a simulated browser against a real API response for the sample file: the upload size check, rule-based vs model-written summary labels, correlations shown with n and p, download links, the question flow, and an expired session. Deliberately breaking a behavior fails the test written for it.
 
 The model layer runs against `httpx.MockTransport` instead of a real provider, which scripts every failure: timeouts, 503 then success, 429 with `Retry-After`, 401, prose instead of JSON, missing fields, and replies containing made-up numbers. No test needs an API key or the network, and a fixture keeps tests off a real provider even when `backend/.env` holds a key.
+
+## Security and privacy
+
+- **Headers on every response:** a Content-Security-Policy that lets pages load scripts, styles and data only from this server and never be framed, `Referrer-Policy: no-referrer` so the page address (which holds the private session ID) is never sent to another site, `nosniff`, HSTS, and a Permissions-Policy that turns off camera, microphone and location.
+- **No third-party requests:** the printable report loads Plotly from this server (`/api/vendor/plotly.min.js`) and runs one inline script, allowed by a per-response nonce. Only the downloaded HTML report, opened from disk, uses Plotly's CDN.
+- **Nothing cached in transit:** every `/api` response except the sample file and Plotly carries `Cache-Control: no-store`.
+- **Input limits:** uploads are capped by size, unzipped size and column count; other requests by a 64 KB body (a request without a length is refused); questions by 2,000 characters.
+- **Abuse limits:** uploads, questions and chart builds are rate-limited per visitor, and heavy work runs one job at a time.
+- **Errors:** unexpected failures return a short reference code; details stay in the server log.
+- Dependencies are checked with `pip-audit` and `npm audit`, both clean as of this release.
 
 ## Known limits
 

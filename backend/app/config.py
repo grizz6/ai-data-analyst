@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # "true-client-ip" behind Render's Cloudflare edge). Takes priority when set
     # and present; leave empty when nothing in front of the app sets it.
     client_ip_header: str = ""
+    custom_charts_per_hour: int = 120
+    # Swagger UI at /docs and ReDoc at /redoc; render.yaml turns them off for the public site.
+    api_docs: bool = True
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     # Language model used only to explain results. Any OpenAI-compatible
