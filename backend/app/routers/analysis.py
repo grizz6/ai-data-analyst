@@ -22,7 +22,7 @@ from app.models.schemas import (
 from app.services import custom_charts, explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
-from app.session_store import add_chat_turn, get, save
+from app.session_store import add_chat_turn, delete, get, save
 from app.workload import BusyError, busy_detail, run_in_slot
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,14 @@ async def upload_dataset(
 @router.get("/sessions/{session_id}", response_model=AnalysisResult)
 async def get_session(session_id: str):
     return session_or_404(session_id)
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+async def delete_session(session_id: str) -> Response:
+    """Remove an analysis and everything stored with it now, rather than at expiry."""
+    if not delete(session_id):
+        raise HTTPException(status_code=404, detail="This analysis wasn't found; it may already be deleted or expired.")
+    return Response(status_code=204)
 
 
 @router.post("/sessions/{session_id}/ask", response_model=QuestionResponse)

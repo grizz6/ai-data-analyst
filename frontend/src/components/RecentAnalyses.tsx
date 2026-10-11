@@ -4,6 +4,7 @@ interface Props {
   items: RecentAnalysis[];
   disabled: boolean;
   onOpen: (sessionId: string) => void;
+  onClear: () => void;
 }
 
 function timeAgo(at: number): string {
@@ -14,12 +15,19 @@ function timeAgo(at: number): string {
   return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
 }
 
-export default function RecentAnalyses({ items, disabled, onOpen }: Props) {
+export default function RecentAnalyses({ items, disabled, onOpen, onClear }: Props) {
   if (items.length === 0) return null;
   return (
     <section className="panel" aria-labelledby="recent-heading">
-      <h2 id="recent-heading">Recent analyses</h2>
-      <p className="muted small">Results are kept on the server for a while after you last open them.</p>
+      <div className="panel-head">
+        <h2 id="recent-heading">Recent analyses</h2>
+        <button type="button" className="link-btn small" onClick={onClear}>
+          Clear list
+        </button>
+      </div>
+      <p className="muted small">
+        Saved in this browser only. Results stay on the server for an hour after you last open them.
+      </p>
       <ul className="recent-list">
         {items.map((item) => (
           <li key={item.sessionId}>

@@ -57,3 +57,54 @@ describe("App", () => {
     expect(loadRecent().map((r) => r.sessionId)).toEqual(["c", "f", "e", "d", "b"]);
   });
 });
+
+describe("privacy controls", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("deletes the analysis on the server, forgets it, and says so", async () => {
+    const result = sampleResult();
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/health") return Promise.resolve(jsonResponse({ max_upload_mb: 10 }));
+      if (init?.method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(jsonResponse(result));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<App />);
+
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), new File(["a\n1\n"], "sales_sample.csv"));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("The analysis was deleted from the server.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/sessions/${result.session_id}`, { method: "DELETE" });
+    expect(loadRecent()).toEqual([]);
+    expect(screen.queryByRole("heading", { name: "Recent analyses" })).not.toBeInTheDocument();
+  });
+
+  it("does nothing if the delete isn't confirmed", async () => {
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>((url) =>
+      Promise.resolve(url === "/api/health" ? jsonResponse({ max_upload_mb: 10 }) : jsonResponse(sampleResult())),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<App />);
+
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), new File(["a\n1\n"], "sales_sample.csv"));
+    await userEvent.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    expect(screen.getByRole("heading", { level: 1, name: "sales_sample.csv" })).toBeInTheDocument();
+  });
+
+  it("clears the recent list from this browser", async () => {
+    rememberAnalysis(entry("a"));
+    rememberAnalysis(entry("b"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ max_upload_mb: 10 })));
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear list" }));
+
+    expect(screen.queryByRole("heading", { name: "Recent analyses" })).not.toBeInTheDocument();
+    expect(loadRecent()).toEqual([]);
+  });
+});

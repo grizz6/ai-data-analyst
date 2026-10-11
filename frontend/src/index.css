@@ -722,3 +722,36 @@ html {
 .file-card .actions {
   margin: 0;
 }
+
+.btn.danger {
+  background: transparent;
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  color: var(--error);
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.panel-head h2 {
+  margin-bottom: 0.5rem;
+}
+
+.notice {
+  color: var(--success);
+  margin: 0.75rem 0 0;
+}
+
+.privacy-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  max-width: 75ch;
+  margin: 0.5rem 0 0;
+}

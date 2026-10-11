@@ -3,7 +3,7 @@ import { getSession, uploadDataset } from "./api";
 import AnalysisDashboard from "./components/AnalysisDashboard";
 import RecentAnalyses from "./components/RecentAnalyses";
 import UploadPanel from "./components/UploadPanel";
-import { forgetAnalysis, loadRecent, rememberAnalysis, type RecentAnalysis } from "./recent";
+import { forgetAll, forgetAnalysis, loadRecent, rememberAnalysis, type RecentAnalysis } from "./recent";
 import type { AnalysisResult } from "./types";
 
 export default function App() {
@@ -13,6 +13,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentAnalysis[]>(loadRecent);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const show = (data: AnalysisResult) => {
     setResult(data);
@@ -31,6 +32,7 @@ export default function App() {
   const analyze = async (target: File, sheet?: string) => {
     setLoading(true);
     setError(null);
+    setNotice(null);
     try {
       const data = await uploadDataset(target, sheet);
       setFile(target);
@@ -61,6 +63,13 @@ export default function App() {
     setResult(null);
     setFile(null);
     setError(null);
+    setNotice(null);
+  };
+
+  const deleted = () => {
+    if (result) setRecent(forgetAnalysis(result.session_id));
+    startOver();
+    setNotice("The analysis was deleted from the server.");
   };
 
   return (
@@ -94,6 +103,11 @@ export default function App() {
             </header>
             <div className="panel">
               <UploadPanel onUpload={(f) => analyze(f)} onReject={setError} loading={loading} />
+              {notice && (
+                <p className="notice" role="status">
+                  {notice}
+                </p>
+              )}
               {error && (
                 <p className="error-msg" role="alert">
                   {error}
@@ -107,7 +121,19 @@ export default function App() {
                 </div>
               )}
             </div>
-            <RecentAnalyses items={recent} disabled={loading} onOpen={reopen} />
+            <RecentAnalyses
+              items={recent}
+              disabled={loading}
+              onOpen={reopen}
+              onClear={() => setRecent(forgetAll())}
+            />
+            <p className="privacy-note">
+              Your file is processed on this server. Its results are deleted at the latest an hour after you
+              last open them, or right away with the Delete button, and are only reachable through your
+              private link. If the server has a language-model key set, the computed results (column names,
+              statistics and the most common values, not the raw file) are sent to that model to write the
+              explanation.
+            </p>
           </>
         )}
 
@@ -123,6 +149,7 @@ export default function App() {
               result={result}
               loading={loading}
               onAnalyzeSheet={file ? (sheet) => analyze(file, sheet) : undefined}
+              onDeleted={deleted}
             />
           </>
         )}

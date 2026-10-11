@@ -55,6 +55,14 @@ export async function buildChart(sessionId: string, request: CustomChartRequest)
   return res.json();
 }
 
+/** Remove an analysis from the server now. An already-gone one counts as deleted. */
+export async function deleteSession(sessionId: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(await errorMessage(res, "Couldn't delete this analysis"));
+  }
+}
+
 export function sampleDataUrl(): string {
   return "/api/sample.csv";
 }

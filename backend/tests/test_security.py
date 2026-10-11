@@ -95,3 +95,15 @@ def test_api_docs_can_be_turned_off(monkeypatch):
     finally:
         monkeypatch.setattr(settings, "api_docs", True)
         importlib.reload(app.main)
+
+
+def test_deleting_an_analysis_removes_everything_stored_with_it(client, sample_csv_bytes):
+    session_id = upload(client, sample_csv_bytes)
+    client.post(f"/api/sessions/{session_id}/ask", json={"question": "What stands out?"})
+
+    assert client.delete(f"/api/sessions/{session_id}").status_code == 204
+    for suffix in ("", "/report", "/cleaned.csv"):
+        assert client.get(f"/api/sessions/{session_id}{suffix}").status_code == 404
+    chart = {"chart_type": "histogram", "x": "units"}
+    assert client.post(f"/api/sessions/{session_id}/charts", json=chart).status_code == 404
+    assert client.delete(f"/api/sessions/{session_id}").status_code == 404

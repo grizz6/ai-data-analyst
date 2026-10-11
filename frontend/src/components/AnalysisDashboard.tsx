@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { askQuestion, cleanedCsvUrl, printableReportUrl, reportDownloadUrl } from "../api";
+import { askQuestion, cleanedCsvUrl, deleteSession, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatNumber, formatP, friendlyType } from "../format";
 import type { AnalysisResult, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
@@ -48,9 +48,26 @@ interface Props {
   result: AnalysisResult;
   loading?: boolean;
   onAnalyzeSheet?: (sheet: string) => void;
+  onDeleted?: () => void;
 }
 
-export default function AnalysisDashboard({ result, loading = false, onAnalyzeSheet }: Props) {
+export default function AnalysisDashboard({ result, loading = false, onAnalyzeSheet, onDeleted }: Props) {
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this analysis from the server now? The report and downloads will stop working.")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteSession(result.session_id);
+      onDeleted?.();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Couldn't delete this analysis");
+      setDeleting(false);
+    }
+  };
+
   const [question, setQuestion] = useState("");
   // Starts from the thread stored with the session, so it survives a reload.
   const [thread, setThread] = useState<ChatTurn[]>(result.chat_history);
@@ -149,8 +166,16 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
             Cleaned CSV
           </a>
+          <button type="button" className="btn danger" disabled={deleting} onClick={handleDelete}>
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
         </div>
       </div>
+      {deleteError && (
+        <p className="error-msg" role="alert">
+          {deleteError}
+        </p>
+      )}
 
       <div className="stats">
         <div className={`stat ${result.quality_issues.length > 0 ? "attention" : "good"}`}>

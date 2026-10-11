@@ -40,6 +40,10 @@ export function rememberAnalysis(entry: RecentAnalysis): RecentAnalysis[] {
   return save([entry, ...rest].slice(0, MAX_RECENT));
 }
 
+export function forgetAll(): RecentAnalysis[] {
+  return save([]);
+}
+
 export function forgetAnalysis(sessionId: string): RecentAnalysis[] {
   return save(loadRecent().filter((r) => r.sessionId !== sessionId));
 }
