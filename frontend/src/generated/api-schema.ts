@@ -542,7 +542,10 @@ export interface operations {
     };
     download_report_api_sessions__session_id__report_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Show a print-ready page that opens the print dialog, to save as PDF. */
+                print?: boolean;
+            };
             header?: never;
             path: {
                 session_id: string;

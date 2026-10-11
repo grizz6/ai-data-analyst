@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { askQuestion, cleanedCsvUrl, reportDownloadUrl } from "../api";
+import { askQuestion, cleanedCsvUrl, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatP } from "../format";
 import type { AnalysisResult, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
@@ -106,6 +106,15 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       <div className="actions">
         <a className="btn" href={reportDownloadUrl(result.session_id)} download>
           Download HTML report
+        </a>
+        <a
+          className="btn secondary"
+          href={printableReportUrl(result.session_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Opens the report in a new tab with the print dialog; choose 'Save as PDF'."
+        >
+          Save report as PDF
         </a>
         <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
           Download cleaned data (CSV)

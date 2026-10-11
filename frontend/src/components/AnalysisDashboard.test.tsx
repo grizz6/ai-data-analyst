@@ -62,6 +62,15 @@ describe("AnalysisDashboard", () => {
     );
   });
 
+  it("opens the print-ready report in a new tab for saving as PDF", () => {
+    const result = sampleResult();
+    render(<AnalysisDashboard result={result} />);
+
+    const link = screen.getByRole("link", { name: "Save report as PDF" });
+    expect(link).toHaveAttribute("href", `/api/sessions/${result.session_id}/report?print=true`);
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("badges identifier columns in the profile table", () => {
     const result = sampleResult();
     result.columns = result.columns.map((c) => (c.name === "region" ? { ...c, is_identifier: true } : c));

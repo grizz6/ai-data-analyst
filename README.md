@@ -161,7 +161,7 @@ Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_b
 | `POST` | `/api/upload` | Upload a file and run the full pipeline. For Excel, `?sheet=NAME` picks a sheet; otherwise the first sheet with data is used |
 | `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
 | `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set. Each question and answer is added to the session's `chat_history` (newest 30 kept), and the last 6 are sent with the next question so follow-ups make sense. Numbers in earlier answers don't count as grounded; only the facts and the questions themselves do |
-| `GET` | `/api/sessions/{id}/report` | Download the HTML report |
+| `GET` | `/api/sessions/{id}/report` | Download the HTML report. With `?print=true` it is shown in the browser instead, in light colors, and opens the print dialog once the charts are drawn; the app's "Save report as PDF" button uses this, so PDFs need no server-side renderer |
 | `GET` | `/api/sessions/{id}/cleaned.csv` | Download the full cleaned dataset as CSV (UTF-8 with a byte-order mark so Excel reads accents correctly). Gaps are filled here, as in the cleaned preview |
 | `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
 

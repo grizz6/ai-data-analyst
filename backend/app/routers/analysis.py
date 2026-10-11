@@ -119,10 +119,18 @@ async def ask_question(session_id: str, body: QuestionRequest):
 
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)
-async def download_report(session_id: str):
+async def download_report(
+    session_id: str,
+    print_view: Annotated[
+        bool,
+        Query(alias="print", description="Show a print-ready page that opens the print dialog, to save as PDF."),
+    ] = False,
+):
     result = session_or_404(session_id)
     # Serializing every chart into the template takes real CPU on big results.
-    html = await run_in_threadpool(report.render_html_report, result)
+    html = await run_in_threadpool(lambda: report.render_html_report(result, for_print=print_view))
+    if print_view:
+        return HTMLResponse(content=html)
     return HTMLResponse(
         content=html,
         headers={

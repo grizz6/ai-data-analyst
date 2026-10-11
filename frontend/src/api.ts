@@ -33,6 +33,11 @@ export function reportDownloadUrl(sessionId: string): string {
   return `/api/sessions/${sessionId}/report`;
 }
 
+/** The report as a print-ready page that opens the browser's print dialog, to save as PDF. */
+export function printableReportUrl(sessionId: string): string {
+  return `/api/sessions/${sessionId}/report?print=true`;
+}
+
 export function cleanedCsvUrl(sessionId: string): string {
   return `/api/sessions/${sessionId}/cleaned.csv`;
 }
