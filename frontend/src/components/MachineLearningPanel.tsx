@@ -14,9 +14,18 @@ interface Props {
   autoTrain?: boolean;
   /** False while the panel sits on a hidden tab: charts drawn then would have no size. */
   visible?: boolean;
+  /** Train this target now, e.g. from a suggestion's button. A new nonce repeats the request. */
+  request?: { target: string; nonce: number } | null;
 }
 
-export default function MachineLearningPanel({ sessionId, columns, suggestions, autoTrain = false, visible = true }: Props) {
+export default function MachineLearningPanel({
+  sessionId,
+  columns,
+  suggestions,
+  autoTrain = false,
+  visible = true,
+  request = null,
+}: Props) {
   const suggested = suggestions.map((t) => t.column);
   const others = columns
     .filter((c) => !c.is_identifier && !c.dtype.startsWith("datetime") && !suggested.includes(c.name))
@@ -27,15 +36,23 @@ export default function MachineLearningPanel({ sessionId, columns, suggestions, 
   const [training, setTraining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Only the latest run's result is shown, whichever finishes first.
+  const latest = useRef(0);
   const handleTrain = async (column: string = target) => {
+    const run = ++latest.current;
+    if (column !== target) {
+      setTarget(column);
+      setReport(null);
+    }
     setTraining(true);
     setError(null);
     try {
-      setReport(await trainModel(sessionId, column));
+      const result = await trainModel(sessionId, column);
+      if (run === latest.current) setReport(result);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Prediction failed");
+      if (run === latest.current) setError(e instanceof Error ? e.message : "Prediction failed");
     } finally {
-      setTraining(false);
+      if (run === latest.current) setTraining(false);
     }
   };
 
@@ -48,6 +65,15 @@ export default function MachineLearningPanel({ sessionId, columns, suggestions, 
     // Runs once per analysis; the panel is re-mounted for a new one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!request) return;
+    started.current = true;
+    // Started from a timer, not the effect body, and cancelled if the request changes first.
+    const timer = setTimeout(() => void handleTrain(request.target), 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.nonce]);
 
   return (
     <>

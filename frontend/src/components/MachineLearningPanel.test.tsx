@@ -97,4 +97,32 @@ describe("MachineLearningPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Train and compare" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("needs at least two values");
   });
+
+  it("trains the target a suggestion asks for, and shows only the latest run", async () => {
+    let finishFirst: (r: Response) => void = () => {};
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishFirst = resolve)))
+      .mockResolvedValueOnce(jsonResponse({ ...report, target: "units", summary: "Best for 'units'." }));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = sampleResult();
+    render(
+      <MachineLearningPanel
+        sessionId={result.session_id}
+        columns={result.columns}
+        suggestions={result.model_targets}
+        autoTrain
+        request={{ target: "units", nonce: 1 }}
+      />,
+    );
+
+    expect(await screen.findByText("Best for 'units'.")).toBeInTheDocument();
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ target: "units" });
+    // The auto-run on the suggested target finishes later and is ignored.
+    finishFirst(jsonResponse(report));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.queryByText(report.summary)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Column to predict")).toHaveValue("units");
+  });
 });
+

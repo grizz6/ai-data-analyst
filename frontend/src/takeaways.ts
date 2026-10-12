@@ -1,5 +1,5 @@
 import { formatNumber } from "./format";
-import type { AnalysisResult } from "./types";
+import type { AnalysisResult, VariableProfile } from "./types";
 
 /** One line per dashboard tab, built from the computed numbers only. */
 
@@ -62,4 +62,41 @@ export function clusteringTakeaway(r: AnalysisResult): string {
   return c.clear
     ? `${c.k} distinct groups (silhouette ${c.silhouette.toFixed(2)}) · largest ${c.clusters[0].size.toLocaleString()} rows`
     : `No clear groups (best silhouette ${c.silhouette.toFixed(2)}, at ${c.k} groups)`;
+}
+
+/** One line for a single column, by its kind. */
+export function variableTakeaway(v: VariableProfile): string {
+  if (v.kind === "number" || v.kind === "count") {
+    const parts = [`median ${formatNumber(v.median)}`, `range ${formatNumber(v.min)} to ${formatNumber(v.max)}`];
+    const o = v.outliers;
+    if (o) parts.push(o.iqr_count ? `${o.iqr_count.toLocaleString()} outliers (${formatNumber(o.iqr_share)}%)` : "no outliers");
+    return parts.join(" · ");
+  }
+  if (v.kind === "binary" && v.binary) {
+    const b = v.binary;
+    const split = b.values.map((value, i) => `${formatNumber((100 * b.counts[i]) / (b.counts[0] + b.counts[1]))}% ${value}`);
+    const top = v.compared[0];
+    const parts = [split.join(" / ")];
+    if (top && top.p_value !== null && top.p_value < 0.05) parts.push(`differs most by ${top.column}`);
+    return parts.join(" · ");
+  }
+  if (v.kind === "category" && v.categories.length) {
+    const top = v.categories[0];
+    return `${v.distinct.toLocaleString()} values · most common '${top.value}' (${formatNumber(top.share)}%)`;
+  }
+  return v.flags[0] ?? `${v.distinct.toLocaleString()} distinct values`;
+}
+
+export function variablesTakeaway(r: AnalysisResult): string {
+  const count = (kinds: string[]) => r.variables.filter((v) => kinds.includes(v.kind)).length;
+  const parts = [`${r.variables.length} columns: ${count(["number", "count"])} numeric, ${count(["binary"])} yes/no, ${count(["category"])} category`];
+  const withOutliers = r.variables.filter((v) => (v.outliers?.iqr_count ?? 0) > 0).length;
+  if (withOutliers) parts.push(`${withOutliers} with outliers`);
+  return parts.join(" · ");
+}
+
+export function suggestionsTakeaway(r: AnalysisResult): string {
+  const recs = r.recommendations;
+  if (!recs.length) return "No analysis stands out for this file yet.";
+  return `${recs.length} analyses fit this file · start with: ${recs[0].title}`;
 }

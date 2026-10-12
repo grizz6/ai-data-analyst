@@ -4,6 +4,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.models.schemas import AnalysisResult, Explanation, RuleInsight, TimeAxisInfo
 from app.services import (
+    advice,
     analysis,
     charts,
     cleaning,
@@ -18,6 +19,7 @@ from app.services import (
     statistics,
     timeaxis,
     timeseries,
+    variables,
     visuals,
 )
 from app.services.ingestion import df_preview_records
@@ -64,6 +66,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     time_series = timeseries.analyze_time_series(metrics_df, axis) if axis else []
     clustering = ml.cluster(metrics_df)
     model_targets = modeling.suggest_targets(metrics_df)
+    variable_profiles = variables.profile_variables(prepared_df, identifiers, axis)
     tab_charts = visuals.build_visuals(
         raw_df, metrics_df, quality_issues, statistical_tests, clustering, axis, identifiers
     )
@@ -139,10 +142,12 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         clustering=clustering,
         model_targets=model_targets,
         visuals=tab_charts,
+        variables=variable_profiles,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),
     )
+    result.recommendations = advice.recommend(result)
     # utf-8-sig adds the byte-order mark Excel needs to show accented text correctly.
     result._cleaned_csv = cleaned_df.to_csv(index=False).encode("utf-8-sig")
     result._chart_csv = metrics_df.to_csv(index=False).encode("utf-8")

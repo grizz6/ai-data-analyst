@@ -54,7 +54,7 @@ async def limit_request_rate(request: Request, call_next):
         path = request.url.path
         if path == "/api/upload":
             limiter, limit, what = rate_limit.uploads, settings.uploads_per_hour, "uploads"
-        elif path.startswith("/api/sessions/") and path.endswith("/ask"):
+        elif path.startswith("/api/sessions/") and (path.endswith("/ask") or path.endswith("/plan")):
             limiter, limit, what = rate_limit.questions, settings.questions_per_hour, "questions"
         elif path.startswith("/api/sessions/") and path.endswith("/charts"):
             limiter, limit, what = rate_limit.charts, settings.custom_charts_per_hour, "chart builds"

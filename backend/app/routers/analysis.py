@@ -18,10 +18,12 @@ from app.models.schemas import (
     CustomChartRequest,
     ModelReport,
     ModelRequest,
+    PlanRequest,
+    PlanResponse,
     QuestionRequest,
     QuestionResponse,
 )
-from app.services import custom_charts, explanation, modeling, report
+from app.services import advice, custom_charts, explanation, modeling, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import add_chat_turn, delete, get, save
@@ -147,6 +149,15 @@ async def ask_question(session_id: str, body: QuestionRequest):
     )
     add_chat_turn(session_id, turn, max_turns=MAX_CHAT_TURNS)
     return response
+
+
+@router.post("/sessions/{session_id}/plan", response_model=PlanResponse)
+async def plan_for_goal(session_id: str, body: PlanRequest):
+    """Order the analyses that fit this file into a plan for a business goal."""
+    result = session_or_404(session_id)
+    if not body.goal.strip():
+        raise HTTPException(status_code=400, detail="Describe the goal first.")
+    return await advice.plan_for_goal(result, body.goal)
 
 
 @router.post("/sessions/{session_id}/charts", response_model=ChartSpec)

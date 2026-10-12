@@ -28,5 +28,10 @@ export type ClusterAnalysis = Schemas["ClusterAnalysis"];
 export type ModelReport = Schemas["ModelReport"];
 export type TargetSuggestion = Schemas["TargetSuggestion"];
 export type TrendInsight = Schemas["TrendInsight"];
+export type VariableProfile = Schemas["VariableProfile"];
+export type BoxStats = Schemas["BoxStats"];
+export type Recommendation = Schemas["Recommendation"];
+export type RecommendationAction = Schemas["RecommendationAction"];
+export type PlanResponse = Schemas["PlanResponse"];
 
 export type ExplanationSource = Explanation["source"];

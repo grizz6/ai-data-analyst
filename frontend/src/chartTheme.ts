@@ -48,8 +48,9 @@ export function themedData(data: Layout[]): Layout[] {
       if (group !== undefined) groupColors.set(group, color);
     }
     const marker = (trace.marker as Layout | undefined) ?? {};
-    // Heatmaps and anything colored by value keep their own scale.
-    if (trace.type === "heatmap" || Array.isArray(marker.color)) return trace;
+    // Heatmaps, anything colored by value, and traces that set meta "fixed-color"
+    // (outliers drawn in red, say) keep their own colors.
+    if (trace.type === "heatmap" || Array.isArray(marker.color) || trace.meta === "fixed-color") return trace;
     const recolored: Layout = { ...trace, marker: { ...marker, color } };
     // Box outlines and line traces draw with `line`; bars and histograms have none.
     if (trace.type === "scatter" || trace.type === "box") {

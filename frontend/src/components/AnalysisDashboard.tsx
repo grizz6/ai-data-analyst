@@ -7,9 +7,11 @@ import {
   overviewTakeaway,
   qualityTakeaway,
   relationshipsTakeaway,
+  suggestionsTakeaway,
   timeSeriesTakeaway,
+  variablesTakeaway,
 } from "../takeaways";
-import type { AnalysisResult, ChartSpec, ChatTurn } from "../types";
+import type { AnalysisResult, ChartSpec, ChatTurn, RecommendationAction } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
@@ -19,8 +21,10 @@ import DataTable from "./DataTable";
 import Hint from "./Hint";
 import MachineLearningPanel from "./MachineLearningPanel";
 import StatisticsPanel from "./StatisticsPanel";
+import SuggestionsPanel from "./SuggestionsPanel";
 import Tile from "./Tile";
 import TimeSeriesPanel from "./TimeSeriesPanel";
+import VariablesPanel from "./VariablesPanel";
 
 /** A few questions this file can answer, built from its own columns. */
 export function suggestedQuestions(result: AnalysisResult): string[] {
@@ -47,7 +51,9 @@ const AXIS_KINDS: Record<string, string> = {
 
 type TabId =
   | "overview"
+  | "suggestions"
   | "quality"
+  | "variables"
   | "explore"
   | "relationships"
   | "time-series"
@@ -147,7 +153,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const visuals = result.visuals ?? {};
   const tabs: [TabId, string][] = [
     ["overview", "Overview"],
+    ["suggestions", "Suggestions"],
     ["quality", "Data quality"],
+    ["variables", "Variables"],
     ["explore", "Explore"],
     ["relationships", "Relationships"],
     ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [TabId, string]] : []),
@@ -166,6 +174,17 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const choose = (id: TabId) => {
     setTab(id);
     window.history.replaceState(null, "", `#${id}`);
+  };
+  const [variable, setVariable] = useState<string | null>(null);
+  const [modelRequest, setModelRequest] = useState<{ target: string; nonce: number } | null>(null);
+  const train = (target: string) => {
+    setModelRequest((previous) => ({ target, nonce: (previous?.nonce ?? 0) + 1 }));
+    choose("models");
+  };
+  const handleAction = (action: RecommendationAction) => {
+    if (action.target) return train(action.target);
+    if (action.column) setVariable(action.column);
+    if (tabs.some(([id]) => id === action.tab)) choose(action.tab as TabId);
   };
   const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
@@ -340,6 +359,17 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </section>
       )}
 
+      {tab === "suggestions" && (
+        <section {...panelProps("suggestions")}>
+          <p className="takeaway">{suggestionsTakeaway(result)}</p>
+          <SuggestionsPanel
+            sessionId={result.session_id}
+            recommendations={result.recommendations}
+            onAction={handleAction}
+          />
+        </section>
+      )}
+
       {tab === "quality" && (
         <section {...panelProps("quality")}>
           <p className="takeaway">{qualityTakeaway(result)}</p>
@@ -384,6 +414,13 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               )}
             </div>
           </div>
+        </section>
+      )}
+
+      {tab === "variables" && (
+        <section {...panelProps("variables")}>
+          <p className="takeaway">{variablesTakeaway(result)}</p>
+          <VariablesPanel variables={result.variables} selected={variable} onSelect={setVariable} onTrain={train} />
         </section>
       )}
 
@@ -496,6 +533,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           suggestions={result.model_targets}
           autoTrain
           visible={tab === "models"}
+          request={modelRequest}
         />
       </section>
 

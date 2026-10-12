@@ -337,6 +337,181 @@ class ChatTurn(ApiModel):
     fallback_reason: str | None = None
 
 
+VariableKind = Literal["binary", "number", "count", "category", "date", "identifier", "text", "constant"]
+
+
+class BoxStats(ApiModel):
+    """Five-number summary; low and high are the whisker ends (the furthest values inside 1.5 x IQR)."""
+
+    n: int
+    q1: float
+    median: float
+    q3: float
+    low: float
+    high: float
+    mean: float
+
+
+class OutlierRow(ApiModel):
+    row: int
+    value: float
+    z: float | None = None
+    rules: list[str] = Field(default_factory=list)
+    cause: str
+    label: str | None = None
+
+
+class OutlierCorrelation(ApiModel):
+    column: str
+    r_all: float
+    r_without: float
+
+
+class OutlierSummary(ApiModel):
+    iqr_low: float
+    iqr_high: float
+    iqr_count: int
+    iqr_share: float
+    z_threshold: float = 3.0
+    z_count: int
+    z_share: float
+    mean_all: float
+    mean_without: float
+    median_all: float
+    median_without: float
+    std_all: float
+    std_without: float
+    correlation: OutlierCorrelation | None = None
+    rows: list[OutlierRow] = Field(default_factory=list)
+
+
+class Histogram(ApiModel):
+    edges: list[float]
+    counts: list[int]
+
+
+class Curve(ApiModel):
+    x: list[Any]
+    y: list[float]
+
+
+class CategoryCount(ApiModel):
+    value: str
+    count: int
+    share: float
+
+
+class BinaryInfo(ApiModel):
+    values: list[str]
+    counts: list[int]
+    positive: str
+    positive_share: float
+
+
+class GroupBox(ApiModel):
+    label: str
+    box: BoxStats
+
+
+class BinarySplit(ApiModel):
+    """One numeric variable for the rows on each side of a binary column."""
+
+    binary_column: str
+    groups: list[GroupBox]
+    p_value: float | None = None
+    effect: float | None = None
+
+
+class BinaryComparison(ApiModel):
+    """How much one variable differs between a binary column's two groups."""
+
+    column: str
+    kind: str
+    effect: float
+    effect_name: str
+    p_value: float | None = None
+    detail: str
+
+
+class VariableProfile(ApiModel):
+    name: str
+    kind: VariableKind
+    count: int
+    missing: int
+    missing_share: float
+    distinct: int
+    mean: float | None = None
+    median: float | None = None
+    std: float | None = None
+    min: float | None = None
+    max: float | None = None
+    skewness: float | None = None
+    box: BoxStats | None = None
+    # Charts zoom to this range when far-out values (beyond 3 x IQR) would squash them.
+    view: list[float] | None = None
+    beyond_view: int = 0
+    histogram: Histogram | None = None
+    density: Curve | None = None
+    qq: Curve | None = None
+    timeline: Curve | None = None
+    timeline_label: str | None = None
+    categories: list[CategoryCount] = Field(default_factory=list)
+    binary: BinaryInfo | None = None
+    outliers: OutlierSummary | None = None
+    splits: list[BinarySplit] = Field(default_factory=list)
+    compared: list[BinaryComparison] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+
+
+class RecommendationAction(ApiModel):
+    tab: str
+    target: str | None = None
+    column: str | None = None
+    label: str
+
+
+class Recommendation(ApiModel):
+    id: str
+    analysis: str
+    title: str
+    why: str
+    columns: list[str] = Field(default_factory=list)
+    action: RecommendationAction
+    score: float = 0.0
+
+
+class PlanRequest(ApiModel):
+    goal: str = Field(max_length=1_000)
+
+
+class PlanStep(ApiModel):
+    id: str
+    title: str
+    why: str
+    action: RecommendationAction
+
+
+class PlanResponse(ApiModel):
+    goal: str
+    steps: list[PlanStep]
+    note: str | None = None
+    configured: bool = False
+    source: ExplanationSource = "rule_based"
+    model: str | None = None
+    fallback_reason: str | None = None
+
+
+class ModelPlan(ApiModel):
+    """What the language model must return for a goal: steps chosen from the offered analyses."""
+
+    class Step(ApiModel):
+        id: str
+        why: str = Field(min_length=1)
+
+    steps: list[Step] = Field(min_length=1)
+    note: str | None = None
+
+
 class AnalysisResult(ApiModel):
     session_id: str
     filename: str
@@ -364,6 +539,8 @@ class AnalysisResult(ApiModel):
     clustering: ClusterAnalysis | None = None
     # Charts for each dashboard tab ("overview", "quality", "explore", "relationships", "clustering").
     visuals: dict[str, list[ChartSpec]] = Field(default_factory=dict)
+    variables: list[VariableProfile] = Field(default_factory=list)
+    recommendations: list[Recommendation] = Field(default_factory=list)
     # Columns worth predicting, most likely first; the Models tab trains the first one.
     model_targets: list[TargetSuggestion] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]

@@ -1,4 +1,11 @@
-import type { AnalysisResult, ChartSpec, CustomChartRequest, ModelReport, QuestionResponse } from "./types";
+import type {
+  AnalysisResult,
+  ChartSpec,
+  CustomChartRequest,
+  ModelReport,
+  PlanResponse,
+  QuestionResponse,
+} from "./types";
 
 /** The server's message for a failed request, or `fallback` when it sent none worth showing. */
 async function errorMessage(res: Response, fallback: string): Promise<string> {
@@ -63,6 +70,17 @@ export async function trainModel(sessionId: string, target: string): Promise<Mod
     body: JSON.stringify({ target }),
   });
   if (!res.ok) throw new Error(await errorMessage(res, "Prediction failed"));
+  return res.json();
+}
+
+/** Order the analyses that fit this file into a plan for a business goal. */
+export async function planForGoal(sessionId: string, goal: string): Promise<PlanResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/plan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ goal }),
+  });
+  if (!res.ok) throw new Error(await errorMessage(res, "Couldn't make a plan"));
   return res.json();
 }
 

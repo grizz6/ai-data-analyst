@@ -5,7 +5,11 @@ import { jsonResponse, sampleResult } from "../test/fixtures";
 import AnalysisDashboard from "./AnalysisDashboard";
 
 // The Models panel trains on load and is tested on its own.
-vi.mock("./MachineLearningPanel", () => ({ default: () => <div data-testid="ml-panel" /> }));
+vi.mock("./MachineLearningPanel", () => ({
+  default: ({ request }: { request: { target: string } | null }) => (
+    <div data-testid="ml-panel">{request ? `training ${request.target}` : ""}</div>
+  ),
+}));
 // Plotly needs a real canvas and layout engine; the chart grid has nothing to test here.
 vi.mock("./ChartGrid", () => ({
   default: ({ charts }: { charts: unknown[] }) => <div data-testid="chart-grid">{charts.length} charts</div>,
@@ -85,8 +89,8 @@ describe("AnalysisDashboard", () => {
     await openTab("Data quality");
     expect(window.location.hash).toBe("#quality");
     await userEvent.keyboard("{ArrowRight}");
-    expect(screen.getByRole("tab", { name: "Explore" })).toHaveFocus();
-    expect(screen.getByRole("tab", { name: "Explore" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Variables" })).toHaveFocus();
+    expect(screen.getByRole("tab", { name: "Variables" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("shows a time series tab only when the file has one", () => {
@@ -255,5 +259,22 @@ describe("AnalysisDashboard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Ask" }));
 
     expect(await screen.findByText("This analysis wasn't found.")).toBeInTheDocument();
+  });
+
+  it("runs a suggestion: training opens the Models tab on that target", async () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+    const suggestions = await openTab("Suggestions");
+    const list = within(suggestions).getByRole("region", { name: "What to run next" });
+    await userEvent.click(within(list).getByRole("button", { name: "Train models on sales" }));
+
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("ml-panel")).toHaveTextContent("training sales");
+  });
+
+  it("opens a column's card from the Variables tab", async () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+    const variables = await openTab("Variables");
+    await userEvent.click(within(variables).getByRole("button", { name: /^units/ }));
+    expect(within(variables).getByRole("article", { name: "Variable units" })).toBeInTheDocument();
   });
 });

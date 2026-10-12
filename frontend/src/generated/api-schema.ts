@@ -150,6 +150,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{session_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan For Goal
+         * @description Order the analyses that fit this file into a plan for a business goal.
+         */
+        post: operations["plan_for_goal_api_sessions__session_id__plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{session_id}/report": {
         parameters: {
             query?: never;
@@ -224,6 +244,8 @@ export interface components {
             }[];
             /** Quality Issues */
             quality_issues: components["schemas"]["QualityIssue"][];
+            /** Recommendations */
+            recommendations: components["schemas"]["Recommendation"][];
             /** Row Count */
             row_count: number;
             /**
@@ -248,15 +270,80 @@ export interface components {
             time_series: components["schemas"]["TimeSeriesAnalysis"][];
             /** Trends */
             trends: components["schemas"]["TrendInsight"][];
+            /** Variables */
+            variables: components["schemas"]["VariableProfile"][];
             /** Visuals */
             visuals: {
                 [key: string]: components["schemas"]["ChartSpec"][];
             };
         };
+        /**
+         * BinaryComparison
+         * @description How much one variable differs between a binary column's two groups.
+         */
+        BinaryComparison: {
+            /** Column */
+            column: string;
+            /** Detail */
+            detail: string;
+            /** Effect */
+            effect: number;
+            /** Effect Name */
+            effect_name: string;
+            /** Kind */
+            kind: string;
+            /** P Value */
+            p_value: number | null;
+        };
+        /** BinaryInfo */
+        BinaryInfo: {
+            /** Counts */
+            counts: number[];
+            /** Positive */
+            positive: string;
+            /** Positive Share */
+            positive_share: number;
+            /** Values */
+            values: string[];
+        };
+        /**
+         * BinarySplit
+         * @description One numeric variable for the rows on each side of a binary column.
+         */
+        BinarySplit: {
+            /** Binary Column */
+            binary_column: string;
+            /** Effect */
+            effect: number | null;
+            /** Groups */
+            groups: components["schemas"]["GroupBox"][];
+            /** P Value */
+            p_value: number | null;
+        };
         /** Body_upload_dataset_api_upload_post */
         Body_upload_dataset_api_upload_post: {
             /** File */
             file: string;
+        };
+        /**
+         * BoxStats
+         * @description Five-number summary; low and high are the whisker ends (the furthest values inside 1.5 x IQR).
+         */
+        BoxStats: {
+            /** High */
+            high: number;
+            /** Low */
+            low: number;
+            /** Mean */
+            mean: number;
+            /** Median */
+            median: number;
+            /** N */
+            n: number;
+            /** Q1 */
+            q1: number;
+            /** Q3 */
+            q3: number;
         };
         /** CategoricalAssociation */
         CategoricalAssociation: {
@@ -287,6 +374,15 @@ export interface components {
             top_values: {
                 [key: string]: unknown;
             }[];
+        };
+        /** CategoryCount */
+        CategoryCount: {
+            /** Count */
+            count: number;
+            /** Share */
+            share: number;
+            /** Value */
+            value: string;
         };
         /** ChartSpec */
         ChartSpec: {
@@ -405,6 +501,13 @@ export interface components {
             /** P Value */
             p_value: number | null;
         };
+        /** Curve */
+        Curve: {
+            /** X */
+            x: unknown[];
+            /** Y */
+            y: number[];
+        };
         /**
          * CustomChartRequest
          * @description A chart the user builds: which kind, and which columns go where.
@@ -495,6 +598,12 @@ export interface components {
             /** Value */
             value: number;
         };
+        /** GroupBox */
+        GroupBox: {
+            box: components["schemas"]["BoxStats"];
+            /** Label */
+            label: string;
+        };
         /** GroupDifference */
         GroupDifference: {
             /** Anova F */
@@ -530,6 +639,13 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Histogram */
+        Histogram: {
+            /** Counts */
+            counts: number[];
+            /** Edges */
+            edges: number[];
         };
         /** MissingPattern */
         MissingPattern: {
@@ -635,6 +751,104 @@ export interface components {
             /** Std */
             std: number | null;
         };
+        /** OutlierCorrelation */
+        OutlierCorrelation: {
+            /** Column */
+            column: string;
+            /** R All */
+            r_all: number;
+            /** R Without */
+            r_without: number;
+        };
+        /** OutlierRow */
+        OutlierRow: {
+            /** Cause */
+            cause: string;
+            /** Label */
+            label: string | null;
+            /** Row */
+            row: number;
+            /** Rules */
+            rules: string[];
+            /** Value */
+            value: number;
+            /** Z */
+            z: number | null;
+        };
+        /** OutlierSummary */
+        OutlierSummary: {
+            correlation: components["schemas"]["OutlierCorrelation"] | null;
+            /** Iqr Count */
+            iqr_count: number;
+            /** Iqr High */
+            iqr_high: number;
+            /** Iqr Low */
+            iqr_low: number;
+            /** Iqr Share */
+            iqr_share: number;
+            /** Mean All */
+            mean_all: number;
+            /** Mean Without */
+            mean_without: number;
+            /** Median All */
+            median_all: number;
+            /** Median Without */
+            median_without: number;
+            /** Rows */
+            rows: components["schemas"]["OutlierRow"][];
+            /** Std All */
+            std_all: number;
+            /** Std Without */
+            std_without: number;
+            /** Z Count */
+            z_count: number;
+            /** Z Share */
+            z_share: number;
+            /**
+             * Z Threshold
+             * @default 3
+             */
+            z_threshold: number;
+        };
+        /** PlanRequest */
+        PlanRequest: {
+            /** Goal */
+            goal: string;
+        };
+        /** PlanResponse */
+        PlanResponse: {
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Fallback Reason */
+            fallback_reason: string | null;
+            /** Goal */
+            goal: string;
+            /** Model */
+            model: string | null;
+            /** Note */
+            note: string | null;
+            /**
+             * Source
+             * @default rule_based
+             * @enum {string}
+             */
+            source: "rule_based" | "llm";
+            /** Steps */
+            steps: components["schemas"]["PlanStep"][];
+        };
+        /** PlanStep */
+        PlanStep: {
+            action: components["schemas"]["RecommendationAction"];
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Why */
+            why: string;
+        };
         /** QualityIssue */
         QualityIssue: {
             /** Category */
@@ -693,6 +907,36 @@ export interface components {
             pearson: number | null;
             /** Spearman */
             spearman: number;
+        };
+        /** Recommendation */
+        Recommendation: {
+            action: components["schemas"]["RecommendationAction"];
+            /** Analysis */
+            analysis: string;
+            /** Columns */
+            columns: string[];
+            /** Id */
+            id: string;
+            /**
+             * Score
+             * @default 0
+             */
+            score: number;
+            /** Title */
+            title: string;
+            /** Why */
+            why: string;
+        };
+        /** RecommendationAction */
+        RecommendationAction: {
+            /** Column */
+            column: string | null;
+            /** Label */
+            label: string;
+            /** Tab */
+            tab: string;
+            /** Target */
+            target: string | null;
         };
         /** RuleInsight */
         RuleInsight: {
@@ -810,6 +1054,60 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VariableProfile */
+        VariableProfile: {
+            /**
+             * Beyond View
+             * @default 0
+             */
+            beyond_view: number;
+            binary: components["schemas"]["BinaryInfo"] | null;
+            box: components["schemas"]["BoxStats"] | null;
+            /** Categories */
+            categories: components["schemas"]["CategoryCount"][];
+            /** Compared */
+            compared: components["schemas"]["BinaryComparison"][];
+            /** Count */
+            count: number;
+            density: components["schemas"]["Curve"] | null;
+            /** Distinct */
+            distinct: number;
+            /** Flags */
+            flags: string[];
+            histogram: components["schemas"]["Histogram"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "binary" | "number" | "count" | "category" | "date" | "identifier" | "text" | "constant";
+            /** Max */
+            max: number | null;
+            /** Mean */
+            mean: number | null;
+            /** Median */
+            median: number | null;
+            /** Min */
+            min: number | null;
+            /** Missing */
+            missing: number;
+            /** Missing Share */
+            missing_share: number;
+            /** Name */
+            name: string;
+            outliers: components["schemas"]["OutlierSummary"] | null;
+            qq: components["schemas"]["Curve"] | null;
+            /** Skewness */
+            skewness: number | null;
+            /** Splits */
+            splits: components["schemas"]["BinarySplit"][];
+            /** Std */
+            std: number | null;
+            timeline: components["schemas"]["Curve"] | null;
+            /** Timeline Label */
+            timeline_label: string | null;
+            /** View */
+            view: number[] | null;
         };
     };
     responses: never;
@@ -1061,6 +1359,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModelReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_for_goal_api_sessions__session_id__plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponse"];
                 };
             };
             /** @description Validation Error */
