@@ -4,7 +4,9 @@
 
 ## About
 
-Upload a CSV or Excel file and get an analysis you can check: a data-quality report, cleaning, summary statistics, correlations, trends, interactive charts, plain-English insights, and a downloadable HTML report. FastAPI backend, React + TypeScript frontend.
+Upload a CSV or Excel file and get an analysis you can check: a data-quality report, cleaning, summary statistics, statistical tests, correlations, time-series analysis and forecasts, clustering, a comparison of a dozen prediction models on held-out test rows, many interactive charts, plain-English insights, and a downloadable HTML report. FastAPI backend, React + TypeScript frontend.
+
+The results are split into tabs: Overview, Data quality, Explore, Relationships, Time series (when the file has a time axis), Clustering, Models, Build a chart, Ask and Data. Each tab opens with one line summing it up, then the numbers, then the charts.
 
 **Design choice:** Pandas computes every number. An optional language model explains results it's handed and is not allowed to calculate. That rule is enforced in code, not just in the prompt: every number in the model's reply is checked against the computed facts, and a reply containing a number that isn't there is thrown away in favor of rule-based text.
 
@@ -16,7 +18,7 @@ Upload a CSV or Excel file and get an analysis you can check: a data-quality rep
 | REST API + interactive docs at `/docs` | Working |
 | React frontend (`frontend/`) | Working |
 | LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| Tests and CI | 220 backend tests (pytest) and 37 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
+| Tests and CI | 325 backend tests (pytest) and 81 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
 | Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
 | Deployment | Ready for Render's free plan via `render.yaml` (see [Hosting on Render](#hosting-on-render)). Also runs locally or as one Docker container |
 
@@ -48,7 +50,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 1 | `ingestion.py` | Reads CSV (detects UTF-8, Windows-1252, or Latin-1 text and comma, semicolon, tab, or pipe delimiters) or Excel (first sheet with data, or a named sheet) into a DataFrame and strips whitespace from column names |
 | 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
 | 2 | `quality.py` | Flags duplicates, missing values, constant columns, IQR outliers, numbers stored as text, and labels written more than one way, each with a severity |
-| 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns, converts numbers stored as text (`$1,200`, `45%`, `(300)`), merges labels that differ only in case or spacing (`West` / `west `), and parses date-like columns; statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
+| 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns, converts numbers stored as text (`$1,200`, `45%`, `(300)`), merges labels that differ only in case or spacing (`West` / `west `), and parses dates (columns named like a date, or whose values look like dates in ISO, day/month/year or written-out formats, mixed formats included); statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
 | 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
 | 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations with sample size and p-value, and trends with a fitted slope and p-value |
 | 6 | `charts.py` | Up to 8 Plotly charts: histograms, bar charts for real categories (not mostly-unique text such as names), a scatter of the most correlated pair, a correlation heatmap, a time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), and a box plot with one panel and axis per column |
@@ -57,6 +59,7 @@ JSON result  +  Plotly chart specs  +  HTML report download
 | 5c | `timeseries.py` | For up to 3 numeric columns along that time axis: averaged into daily to yearly periods (picked from the date spacing) or kept as steps, rolling mean, an autocorrelation chart, ADF stationarity test (20+ periods), strongest autocorrelation, trend and seasonal strength from a classical decomposition, and a Holt or Holt–Winters forecast with an approximate 95% band |
 | 5d | `ml.py` | K-means clustering on the standardized numeric columns (2–6 groups, picked by silhouette score; under 0.25 is reported as no real grouping) with a PCA map |
 | 5e | `modeling.py` | Suggests columns to predict (outcome-like names, then the last column). For a chosen target: an 80/20 train/test split, then a baseline, logistic/linear, ridge, lasso, k-nearest neighbours, naive Bayes, decision tree, random forest, bagged trees, extra trees, gradient boosting, AdaBoost and SVM, each cross-validated on the training rows and scored on train and test (overfitting flagged). The best model is picked by cross-validation; charts: model comparison, learning curve, confusion matrix, ROC and precision–recall curves, predicted vs actual, residuals, and permutation importance on the test rows |
+| 6a | `visuals.py` | The charts for each dashboard tab. Overview: column types, complete rows. Data quality: missing values per column, where values are missing, outliers per column, issues by kind (each left out when there's nothing to show). Explore: histograms, category counts and box plots for every column, rows over time. Relationships: Pearson and Spearman heatmaps, a scatter plot for every pair of the most varied columns, group comparisons, Cramér's V, a crosstab. Clustering: silhouette score for each k, group sizes, group profiles, PCA variance, the PCA map. Histograms and box plots are summarized on the server, so a 100,000-row file adds about 0.6 MB, not every value |
 | 6b | `custom_charts.py` | Charts the user builds in the "Build your own chart" panel: bar and line totals, averages, or medians per category or time bucket, scatter, histogram, and box plots split by category |
 | 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
 | 8 | `explanation.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
