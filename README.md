@@ -1,255 +1,52 @@
-# AI Data Analyst Agent
+# AI Data Analyst
 
 [![CI](https://github.com/grizz6/ai-data-analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/grizz6/ai-data-analyst/actions/workflows/ci.yml)
 
-## About
+**Live:** https://ai-data-analyst-xz78.onrender.com
 
-Upload a CSV or Excel file and get an analysis you can check: a data-quality report, cleaning, summary statistics, statistical tests, correlations, time-series analysis and forecasts, clustering, a comparison of a dozen prediction models on held-out test rows, many interactive charts, plain-English insights, and a downloadable HTML report. FastAPI backend, React + TypeScript frontend.
+## The problem
 
-The results are split into tabs: Overview, Suggestions, Data quality, Variables, Explore, Relationships, Time series (when the file has a time axis), Clustering, Models, Build a chart, Ask and Data. Each tab opens with one line summing it up, then the numbers, then the charts.
+Every analysis starts with exploratory data analysis (EDA): what kind of data each column holds, where the gaps and outliers are, how the columns relate, and which analysis the data can support. Done by hand, that means writing the same Pandas and plotting code for every new file before any real question gets answered, and outliers or entry errors that slip through quietly distort everything after.
 
-The exploratory pass is the core. **Variables** gives every column its own card: what kind of variable it is (yes/no, number, count, category, date, identifier, free text), its key numbers, and charts that suit it (histogram, box, violin, Q-Q plot, the values over time, and the same variable split by each yes/no column). Outliers are counted by two rules (1.5 × IQR and |z| > 3), marked on the charts, listed with a likely cause (placeholder code, sign error, unit or extra-zeros typo, or a genuine extreme), and shown with the mean, median, spread and strongest correlation with and without them. A yes/no column's card ranks every other column by how much it differs between the two groups. **Suggestions** lists the analyses this file supports, each with the reason from the data and a button that runs it, and turns a business goal written in plain words into a short plan of those analyses.
+## What it does
 
-**Design choice:** Pandas computes every number. An optional language model explains results it's handed and is not allowed to calculate. That rule is enforced in code, not just in the prompt: every number in the model's reply is checked against the computed facts, and a reply containing a number that isn't there is thrown away in favor of rule-based text.
+Upload a CSV or Excel file (up to 75 MB) and get the whole exploratory pass in seconds, then the analyses it points to.
 
-**Status:**
+- **Every column profiled.** Its type (yes/no, number, count, category, date, identifier, free text), key numbers, and the charts that suit it: histogram, box, violin, Q-Q plot, values over time, and a split by each yes/no column.
+- **Outliers explained, not just counted.** Two rules (1.5 × IQR and |z| > 3), marked on the charts, listed by row with a likely cause (placeholder code like 999, impossible negative, a 100× typo, or a genuine extreme), and shown with the mean, spread and correlation with and without them.
+- **Yes/no columns compared.** Every other column ranked by how much it differs between the two groups, the starting point for logistic regression.
+- **Relationships and structure.** Correlation heatmaps, scatter plots for every pair, group comparisons, statistical tests with adjusted p-values, clustering with a PCA map, and time-series analysis with a forecast whenever the file has a time axis (a date column, or date parts, timestamps, years, steps or meaningful row order).
+- **Models on held-out data.** Up to eleven regression or classification models (linear, logistic, ridge, lasso, k-nearest neighbours, naive Bayes, trees, random forest, bagging, boosting, SVM) against a baseline, scored by cross-validation and on a 20% test set, with overfitting flagged.
+- **What to run next.** Analyses ranked by how strongly the data supports them, each with the reason and a button that runs it. Describe a business goal in plain words and get a step-by-step plan built from those analyses.
+- **Ask, build, export.** Questions about the data, custom charts, the cleaned CSV, and an HTML or PDF report.
 
-| Part | State |
-|---|---|
-| Analysis pipeline (ingest → quality → clean → profile → analyze → charts → insights → report) | Working |
-| REST API + interactive docs at `/docs` | Working |
-| React frontend (`frontend/`) | Working |
-| LLM explanations and Q&A | **Built, not yet run against a live provider.** OpenAI-compatible client with retries, a grounding check, and fallback, tested against a fake server. Rule-based text until `ADA_LLM_API_KEY` is set |
-| Tests and CI | 340 backend tests (pytest) and 93 frontend tests (Vitest, React Testing Library). On every push GitHub Actions also runs ruff, mypy and ESLint, builds the frontend, and checks the generated API types are current |
-| Persistence | Working, single-machine. Results are stored in SQLite (`backend/data/ada.sqlite3`), survive restarts, expire after 60 minutes without use, and are capped at 20. Not yet a shared database such as Postgres |
-| Deployment | Ready for Render's free plan via `render.yaml` (see [Hosting on Render](#hosting-on-render)). Also runs locally or as one Docker container |
+## Why the numbers can be trusted
 
----
+Pandas, SciPy and scikit-learn compute every figure. A language model (Groq, `openai/gpt-oss-120b`) only explains results it is handed, and the code checks every number in its reply against the computed results: any number it didn't receive throws the reply out in favour of rule-based text. Each summary, answer and plan says which one wrote it.
 
-## Architecture
+## Run it locally
 
-```
-Browser: React + Vite (frontend/)
-        │  upload .csv / .xlsx / .xls
-        ▼
-┌───────────────────────────── FastAPI backend ─────────────────────────────┐
-│ size limit (middleware)                                                   │
-│   → ingestion → identifiers → quality → cleaning → profiling              │
-│   → analysis → charts → rule-based insights       worker thread (Pandas)  │
-│   → explanation: LLM + grounding check,                                   │
-│     or rule-based fallback                        event loop (network)    │
-│   → SQLite session store (survives restarts)                              │
-└───────────────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-JSON result  +  Plotly chart specs  +  HTML report download
-```
-
-### Pipeline (`backend/app/services/`)
-
-| Step | Module | What it does |
-|------|--------|----------------|
-| 1 | `ingestion.py` | Reads CSV (detects UTF-8, Windows-1252, or Latin-1 text and comma, semicolon, tab, or pipe delimiters) or Excel (first sheet with data, or a named sheet) into a DataFrame and strips whitespace from column names |
-| 1b | `semantics.py` | Spots identifier columns (`order_id`, `customerId`, `sku`, `zip`, or a 1, 2, 3... row counter) so they're profiled but kept out of statistics, outlier checks, imputation, and charts |
-| 2 | `quality.py` | Flags duplicates, missing values, constant columns, IQR outliers, numbers stored as text, and labels written more than one way, each with a severity |
-| 3 | `cleaning.py` | Two steps. First drops duplicate rows and ≥90%-empty columns, converts numbers stored as text (`$1,200`, `45%`, `(300)`), merges labels that differ only in case or spacing (`West` / `west `), and parses dates (columns named like a date, or whose values look like dates in ISO, day/month/year or written-out formats, mixed formats included); statistics are computed on that. Then fills gaps (median for numbers, mode for text, never dates or IDs) for the cleaned preview only, so filled values never skew a figure |
-| 4 | `profiling.py` | Per-column dtype, missing count and %, distinct values, samples, identifier flag |
-| 5 | `analysis.py` | `describe()` stats, top categories, strongest correlations with sample size and p-value, and trends with a fitted slope and p-value |
-| 6 | `charts.py` | Up to 8 Plotly charts: histograms, bar charts for real categories (not mostly-unique text such as names), a scatter of the most correlated pair, a correlation heatmap, a time-series line (averaged into daily, weekly, monthly, quarterly, or yearly buckets so it stays under 366 points), and a box plot with one panel and axis per column |
-| 5b | `statistics.py` | Distribution shape (skewness, kurtosis, normality test, values beyond 3 SD), Spearman and Kendall rank correlations, chi-square with Cramér's V between categories, Kruskal–Wallis and ANOVA with η² between groups, and columns missing together. Each family's p-values are Benjamini–Hochberg adjusted |
-| 5b′ | `timeaxis.py` | Finds what orders the rows in time: a date column; year with month (and day, hour), quarter or week columns, month names included; Unix timestamps in seconds, milliseconds or microseconds (named like a time, or only increasing); a year column; a step column (`t`, `step`, `period`, ...); or row order when a Ljung–Box test shows each value depends on the ones before, unless the file is sorted by a value or grouped by a category |
-| 5c | `timeseries.py` | For up to 3 numeric columns along that time axis: averaged into daily to yearly periods (picked from the date spacing) or kept as steps, rolling mean, an autocorrelation chart, ADF stationarity test (20+ periods), strongest autocorrelation, trend and seasonal strength from a classical decomposition, and a Holt or Holt–Winters forecast with an approximate 95% band |
-| 5d | `ml.py` | K-means clustering on the standardized numeric columns (2–6 groups, picked by silhouette score; under 0.25 is reported as no real grouping) with a PCA map |
-| 5e | `modeling.py` | Suggests columns to predict (outcome-like names, then the last column). For a chosen target: an 80/20 train/test split, then a baseline, logistic/linear, ridge, lasso, k-nearest neighbours, naive Bayes, decision tree, random forest, bagged trees, extra trees, gradient boosting, AdaBoost and SVM, each cross-validated on the training rows and scored on train and test (overfitting flagged). The best model is picked by cross-validation; charts: model comparison, learning curve, confusion matrix, ROC and precision–recall curves, predicted vs actual, residuals, and permutation importance on the test rows |
-| 5f | `variables.py` | One profile per column: its kind; statistics; a histogram, density curve, Q-Q quantiles and timeline sent as data, not drawn figures; outliers by the IQR and z rules with the most extreme rows (likely errors first), each one's likely cause, and the figures with and without them; charts zoom past values beyond 3 × IQR so a single typo can't squash them. Yes/no columns get every other column compared between their two groups (Mann–Whitney with rank-biserial effect, or chi-square with Cramér's V; Benjamini–Hochberg adjusted) |
-| 5g | `advice.py` | Lists the analyses the file supports (fix quality, check suspicious values, logistic regression on yes/no columns, regression, classification, time series, clustering, group comparisons, correlations, skewed columns), each with its reason and where to run it. For a stated goal, a language model orders a few of them into a plan; it can only pick listed analyses and the number check applies. Without a model, keyword and column-name rules make the plan |
-| 6a | `visuals.py` | The charts for each dashboard tab. Overview: column types, complete rows. Data quality: missing values per column, where values are missing, outliers per column, issues by kind (each left out when there's nothing to show). Explore: histograms, category counts and box plots for every column, rows over time. Relationships: Pearson and Spearman heatmaps, a scatter plot for every pair of the most varied columns, group comparisons, Cramér's V, a crosstab. Clustering: silhouette score for each k, group sizes, group profiles, PCA variance, the PCA map. Histograms and box plots are summarized on the server, so a 100,000-row file adds about 0.6 MB, not every value |
-| 6b | `custom_charts.py` | Charts the user builds in the "Build your own chart" panel: bar and line totals, averages, or medians per category or time bucket, scatter, histogram, and box plots split by category |
-| 7 | `insights.py` | Turns the results above into plain-English bullets with no model call |
-| 8 | `explanation.py`, `llm_client.py`, `grounding.py` | Sends the computed facts to the model, rejects any reply containing a number not in those facts, and falls back to rule-based text on any failure |
-| 9 | `report.py` | Renders `templates/report.html` with Jinja2, charts included |
-
-`pipeline.py` chains these for one upload. The Pandas work runs in a worker thread so one large file doesn't stall other requests; only the explanation step, which waits on the network, runs on the event loop.
-
----
-
-## Quick start
-
-Developed on Python 3.12 (the pinned NumPy needs 3.10 or newer) and Node 22.
+Python 3.12 and Node 22.
 
 ```bash
-./scripts/run-backend.sh
+./scripts/run-backend.sh     # API on http://127.0.0.1:8000 (docs at /docs)
+./scripts/run-frontend.sh    # app on http://localhost:5173
 ```
 
-On first run the script creates `backend/.venv` and installs `requirements.txt`, then starts Uvicorn on `http://127.0.0.1:8000`. API docs are at **http://127.0.0.1:8000/docs**.
+Or as one container: `docker build -t ai-data-analyst . && docker run -p 8000:8000 ai-data-analyst`.
 
-In a second terminal:
+Settings are `ADA_*` environment variables (see `backend/.env.example` and `backend/app/config.py`). The one most people need is `ADA_LLM_API_KEY`, a free Groq key; without it everything works and the text is rule-based.
 
-```bash
-./scripts/run-frontend.sh
-```
+## Under the hood
 
-Open **http://localhost:5173** and drop in `sample-data/sales_sample.csv` (31 rows of weekly sales by region and product).
+- **Backend:** FastAPI, Pandas, NumPy, SciPy, statsmodels, scikit-learn, Plotly, SQLite for sessions that expire after an hour. Large files are read in chunks and analysed on a 100,000-row sample, which keeps a 75 MB file under 350 MB of memory.
+- **Frontend:** React, TypeScript, Vite, Plotly.js. Types are generated from the backend's schemas.
+- **Hosting:** Render's free plan, deployed on every push to `main`. The app requests its own address every 10 minutes so the free plan never puts it to sleep.
+- **Quality:** 348 backend and 93 frontend tests, many on files with defects planted at known positions; CI runs them with ruff, mypy, ESLint and a Docker build on every push. A manual "Site check" workflow tests the live site end to end.
+- **Privacy and abuse limits:** results are reachable only through an unguessable link and deleted after an hour or on request; uploads, questions and model runs are rate-limited per visitor; strict security headers and no third-party requests.
 
-**As one process.** Build the frontend once and the backend serves it too, so everything runs on port 8000 with no second server:
+## Limits
 
-```bash
-cd frontend && npm run build && cd ..
-./scripts/run-backend.sh
-```
-
-Then open **http://127.0.0.1:8000**. `/api/*` is the API, `/docs` the API docs, and every other path is the app.
-
-### Docker
-
-The `Dockerfile` builds the frontend and a Python image that serves it together with the API on port 8000, running as an unprivileged user:
-
-```bash
-docker build -t ai-data-analyst .
-docker run -p 8000:8000 -v ada-data:/app/backend/data ai-data-analyst
-```
-
-The volume keeps stored analyses across container restarts. CI builds the image on every push, starts it, uploads the sample file, downloads the cleaned CSV, restarts the container, and checks the session is still there.
-
-### Hosting on Render
-
-`render.yaml` describes one free Render web service built from the `Dockerfile`, so the API and the frontend share one address.
-
-One-time setup:
-
-1. Sign in at [render.com](https://render.com) with GitHub (the free plan needs no card).
-2. **New → Blueprint**, pick this repository, and confirm. Render asks for `ADA_LLM_API_KEY`: paste a key for model-written explanations, or leave it empty for rule-based text.
-3. When the first deploy finishes, the app is at `https://<service-name>.onrender.com`.
-
-Every push to `main` redeploys it. On the free plan a service sleeps after 15 minutes without visitors and takes about a minute to wake; this app prevents that by requesting its own public address (`RENDER_EXTERNAL_URL`, which Render sets) every 10 minutes while it runs (`app/keep_awake.py`; change with `ADA_KEEP_AWAKE_MINUTES`, `0` turns it off). A GitHub Actions job pings it too, as a backup. One service kept up all month uses about 744 of the free plan's 750 instance hours. The free plan also has 512 MB of memory, and starts with an empty database after each restart or redeploy, which matters little since analyses expire after an hour anyway.
-
-### Tests
-
-```bash
-cd backend
-python -m pip install -r requirements-dev.txt
-python -m pytest
-```
-
-Frontend (Vitest and React Testing Library, in a simulated browser):
-
-```bash
-cd frontend
-npm test
-```
-
-CI also runs `ruff check .` and `mypy` in `backend/` (settings in `backend/pyproject.toml`) and `npm run lint` (ESLint, TypeScript and React Hooks rules, zero warnings allowed) in `frontend/`.
-
-### API types
-
-The frontend's TypeScript types are generated from the backend's Pydantic models, not written by hand. After changing anything in `backend/app/models/schemas.py`, run:
-
-```bash
-./scripts/gen-api-types.sh
-```
-
-It exports FastAPI's OpenAPI schema and turns it into `frontend/src/generated/api-schema.ts` with `openapi-typescript`. CI regenerates the file and fails if the committed copy is stale.
-
-### Configuration
-
-Settings come from environment variables with the `ADA_` prefix, or from `backend/.env` (copy `backend/.env.example`). See `backend/app/config.py`.
-
-| Variable | Default | Effect |
-|---|---|---|
-| `ADA_MAX_UPLOAD_MB` | `75` | Upload size limit. Oversized uploads get a 413, from the `Content-Length` header before the body is read, or mid-read if no length was sent |
-| `ADA_MAX_EXCEL_MB` | `15` | Lower limit for Excel, which has to be opened whole; larger workbooks are asked to be saved as CSV |
-| `ADA_MAX_ANALYSIS_ROWS` | `100000` | Files with more rows are analyzed on a random sample of this many, drawn evenly across the file in fixed-size chunks so the whole file is never in memory. The dashboard, report and model all say when a sample was used |
-| `ADA_MAX_EXCEL_UNZIPPED_MB` | `100` | An `.xlsx` is a zip archive; one that would expand past this once opened is refused before parsing, so a small upload can't unpack into gigabytes |
-| `ADA_MAX_COLUMNS` | `200` | Files with more columns are refused with a plain message. Memory and result size grow with the square of the column count: 3,000 columns took over 1 GB, more than a free host has |
-| `ADA_MAX_CONCURRENT_ANALYSES` | `1` | Analyses and custom charts that run at once. A 74 MB CSV, read in chunks and sampled to 100,000 rows, peaks around 310 MB, so one at a time fits a 512 MB free instance |
-| `ADA_ANALYSIS_QUEUE_WAIT_SECONDS` | `60` | How long a request waits for a free slot before getting a 503 "busy, try again" |
-| `ADA_MISSING_THRESHOLD_DROP` | `0.9` | Columns at or above this missing fraction are dropped during cleaning |
-| `ADA_FRONTEND_DIST` | `frontend/dist` | Built frontend to serve at `/`; if it isn't there, `/` just points at `/docs` |
-| `ADA_DATABASE_PATH` | `backend/data/ada.sqlite3` | SQLite file for stored analyses (created on first run; `:memory:` keeps them in memory only) |
-| `ADA_SESSION_TTL_MINUTES` | `60` | An analysis is forgotten after this long without being viewed, asked about, or downloaded |
-| `ADA_MAX_SESSIONS` | `20` | Most analyses kept in memory at once; the least recently used is dropped first |
-| `ADA_UPLOADS_PER_HOUR` | `10` | Uploads one visitor (IP address) may make in any hour; more get a 429 with `Retry-After`. `0` turns the limit off |
-| `ADA_QUESTIONS_PER_HOUR` | `30` | Same for questions, which are what spend the LLM quota. Counts are kept in memory, per process |
-| `ADA_CLIENT_IP_HEADER` | empty | A header the hosting edge overwrites with the visitor's address, used for rate limits when present. `render.yaml` sets `true-client-ip` |
-| `ADA_TRUSTED_PROXY_HOPS` | `0` | For hosts without such a header: the number of reverse proxies that append to `X-Forwarded-For`, so the visitor's address is the entry that many places from the right. With 0 the header is ignored, since a visitor could put anything in it |
-| `ADA_CUSTOM_CHARTS_PER_HOUR` | `120` | Custom chart builds one visitor may make in an hour |
-| `ADA_API_DOCS` | `true` | Serve the interactive API docs at `/docs` and `/redoc`. `render.yaml` turns them off |
-| `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
-| `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
-| `ADA_LLM_MODEL` | `openai/gpt-oss-120b` | Model name at that endpoint. Groq retired Llama 3.3 70B on 2026-08-16 |
-| `ADA_LLM_FALLBACK_MODELS` | `["openai/gpt-oss-20b"]` | Tried in order when the provider answers 404 for a retired model (a JSON list) |
-
-### Turning on the language model
-
-1. Create a free API key at [console.groq.com](https://console.groq.com), or use any provider with an OpenAI-compatible API and set `ADA_LLM_BASE_URL` and `ADA_LLM_MODEL` to match.
-2. Put the key in `backend/.env` as `ADA_LLM_API_KEY=...` and restart the backend.
-3. `GET /api/health` should report `"llm_configured": true`.
-
-Every explanation and answer says what wrote it. `source` is `"llm"` or `"rule_based"`, `model` names the model, and `fallback_reason` explains any fallback (provider down, timeout, bad JSON, or a number the model made up). The frontend banner and the report's "How this report was made" section show the same thing.
-
----
-
-## API endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/upload` | Upload a file and run the full pipeline. For Excel, `?sheet=NAME` picks a sheet; otherwise the first sheet with data is used |
-| `GET` | `/api/sessions/{id}` | Fetch a stored analysis result |
-| `DELETE` | `/api/sessions/{id}` | Delete an analysis and everything stored with it (results, cleaned data, chart data, questions) right away. The dashboard's Delete button calls this |
-| `POST` | `/api/sessions/{id}/ask` | Ask a question about the data. Answered by the model from the computed facts, or with the key findings when no key is set. Each question and answer is added to the session's `chat_history` (newest 30 kept), and the last 6 are sent with the next question so follow-ups make sense. Numbers in earlier answers don't count as grounded; only the facts and the questions themselves do |
-| `POST` | `/api/sessions/{id}/plan` | Turn a business goal (`{"goal": "..."}`) into 3–5 steps chosen from the file's recommended analyses, each with why it serves the goal and the app action that runs it. Shares the question rate limit |
-| `POST` | `/api/sessions/{id}/model` | Predict a column (`{"target": "..."}`) from the others: classification for text or few-valued columns, regression otherwise. Returns, per model, cross-validation, train and test scores, test AUC or MAE and fit time, plus the best model's test metrics, permutation importances and evaluation charts. Rate-limited (`ADA_MODELS_PER_HOUR`, 20). The dashboard trains the first suggested target automatically |
-| `GET` | `/api/sessions/{id}/report` | Download the HTML report. With `?print=true` it is shown in the browser instead, in light colors, and opens the print dialog once the charts are drawn; the app's "Save report as PDF" button uses this, so PDFs need no server-side renderer |
-| `POST` | `/api/sessions/{id}/charts` | Build a chart the user picked: `chart_type` (`bar`, `line`, `scatter`, `histogram`, `box`), columns `x` and `y`, and `aggregate` (`count`, `sum`, `mean`, `median`). Drawn from the prepared data without filled-in gaps or identifier columns; a combination that doesn't fit (a histogram of text, say) gets a 400 saying why |
-| `GET` | `/api/sessions/{id}/cleaned.csv` | Download the full cleaned dataset as CSV (UTF-8 with a byte-order mark so Excel reads accents correctly). Gaps are filled here, as in the cleaned preview |
-| `GET` | `/api/sample.csv` | The example sales file behind the upload screen's "Try the sample sales data" link |
-| `GET` | `/api/health` | Status, upload limit, whether an LLM key is set, and which model |
-
-Problems with the file itself (empty, unreadable, bad sheet name) return 400 with a plain explanation. Unexpected server errors return 500 with a short reference code; the details go to the server log only.
-
----
-
-## The algorithms
-
-- **Missing values and constant columns** (`quality.py`): `isna().mean()` gives each column's null rate. Anything above 0% is `info`, 50% or more is a `warning`, and 90% or more is an `error`. A column with exactly one distinct non-null value is flagged as constant.
-- **IQR outliers** (`quality.py`): for each numeric, non-identifier column with at least 4 values, compute Q1, Q3, and `IQR = Q3 − Q1`, then count values outside `[Q1 − 1.5·IQR, Q3 + 1.5·IQR]` (Tukey's fences).
-- **Identifier detection** (`semantics.py`): column names are split into words across snake_case, camelCase, and spaces. Any word `id`, or a last word such as `uuid`, `key`, `sku`, `zip`, or `phone`, marks an identifier, while `paid` or `grid_size` don't match. A whole-number column counting up by one with no gaps or repeats over 20+ rows is a row counter whatever its name.
-- **Correlation ranking** (`analysis.py: top_correlations`): Pearson correlation across all numeric pairs, keeping pairs with `|r| ≥ 0.5` and returning the 10 strongest. Each pair carries `n` (rows where both columns have a value) and a two-sided p-value from `scipy.stats.pearsonr`; when `p ≥ 0.05` the insight says the correlation could be chance.
-- **Trend detection** (`analysis.py: detect_trends`), two methods:
-  - *Date-based:* sort by the first datetime column, then for up to 3 numeric columns compare the mean of the first half against the second half and fit a least-squares line (`scipy.stats.linregress`, slope reported per day, or per month for timelines over 90 days). A column is "up" or "down" only when the halves differ by more than 5% **and** the slope is significant (`p < 0.05`); a big change that could be noise is reported as stable, and says so.
-  - *Row-order proxy:* only when the file has no datetime column. For up to 5 numeric columns with at least 10 values, compare the mean of the first 5 rows to the mean of the last 5. A rise or fall of more than 10% with a significant slope over row number (`p < 0.05`) is reported with its percentage, slope, and p-value.
-- **Rule-based insights** (`insights.py`): converts dataset size, quality counts, numeric summaries, top categories, correlations (≥0.7 = "strong", otherwise "moderate"), trends, and column maximums into sentences, so the narrative is deterministic. A maximum points at its record by ID, or by its row in the original file.
-- **Grounding check** (`grounding.py`): extracts every number from the model's text and requires each to match a number in the facts it was sent, within the rounding its own decimal places imply (`0.98` matches `0.9832`, `0.99` doesn't). Totals, ratios, restated percentages, and invented figures fail. Signs are compared loosely, so "fell 3.5%" matches a change of `-3.5`; the check guarantees magnitudes, not direction words.
-- **Model calls** (`llm_client.py`): plain `httpx` in JSON mode with a 30 s timeout. Timeouts, connection errors, 429 and 5xx are retried twice with exponential backoff (honoring `Retry-After` up to 10 s). Other 4xx errors fail at once. Replies are validated with Pydantic before use.
-
-## How it's tested
-
-`backend/tests/` builds datasets with defects planted at known positions and asserts the pipeline finds exactly those: missingness at 91 / 55 / 10%, exactly three values outside Tukey's fences, two columns constructed at r = 0.87, a series rising 30% versus one moving 2%, a +10% change buried in noise that must stay "stable", identifier columns, gaps in dates, prices stored as `$1,234` text, labels written several ways, several CSV encodings and delimiters, multi-sheet workbooks, a crafted archive that unzips far past its size, and uploads just over the size limit. Session expiry is tested with a fake clock.
-
-`frontend/src/` tests run in a simulated browser against a real API response for the sample file: the upload size check, rule-based vs model-written summary labels, correlations shown with n and p, download links, the question flow, and an expired session. Deliberately breaking a behavior fails the test written for it.
-
-The model layer runs against `httpx.MockTransport` instead of a real provider, which scripts every failure: timeouts, 503 then success, 429 with `Retry-After`, 401, prose instead of JSON, missing fields, and replies containing made-up numbers. No test needs an API key or the network, and a fixture keeps tests off a real provider even when `backend/.env` holds a key.
-
-## Security and privacy
-
-- **Headers on every response:** a Content-Security-Policy that lets pages load scripts, styles and data only from this server and never be framed, `Referrer-Policy: no-referrer` so the page address (which holds the private session ID) is never sent to another site, `nosniff`, HSTS, and a Permissions-Policy that turns off camera, microphone and location.
-- **No third-party requests:** the printable report loads Plotly from this server (`/api/vendor/plotly.min.js`) and runs one inline script, allowed by a per-response nonce. Only the downloaded HTML report, opened from disk, uses Plotly's CDN.
-- **Nothing cached in transit:** every `/api` response except the sample file and Plotly carries `Cache-Control: no-store`.
-- **Input limits:** uploads are capped by size, unzipped size and column count; other requests by a 64 KB body (a request without a length is refused); questions by 2,000 characters.
-- **Abuse limits:** uploads, questions and chart builds are rate-limited per visitor, and heavy work runs one job at a time.
-- **Errors:** unexpected failures return a short reference code; details stay in the server log.
-- **Visitors control their data:** results are only reachable through the unguessable session link, are deleted at the latest an hour after last use or at once with the Delete button, and the upload screen says so. The browser's recent-analyses list holds only file names and session IDs and can be cleared.
-- Dependencies are checked with `pip-audit` and `npm audit`, both clean as of this release.
-
-## Known limits
-
-- Results are stored in a local SQLite file, which suits one server; several servers behind a load balancer would need a shared database such as Postgres.
-- There is no authentication: anyone with the link can use a deployed copy. Uploads and questions are rate-limited per IP address; behind a reverse proxy, set `ADA_CLIENT_IP_HEADER` (or `ADA_TRUSTED_PROXY_HOPS`), or every visitor shares the proxy's address and one limit.
-- The LLM path has only been exercised against a fake provider.
-- The grounding check verifies numbers, not wording: a model could still describe a drop as a rise.
-
-## Built with
-
-**Backend:** Python, FastAPI, Uvicorn, Pandas, NumPy, SciPy, Plotly, Jinja2, Pydantic, httpx, openpyxl; pytest, ruff, mypy.
-**Frontend:** React, TypeScript, Vite, Plotly.js (cartesian build, lazy-loaded); Vitest, React Testing Library, ESLint, openapi-typescript.
-**CI:** GitHub Actions.
+- One server: sessions live in a local SQLite file, and a free instance runs one analysis at a time.
+- No accounts: anyone with the address can use the site, within the rate limits.
+- The number check verifies figures, not wording: a model could still call a drop a rise.
