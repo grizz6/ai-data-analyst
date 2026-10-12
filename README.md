@@ -121,7 +121,7 @@ One-time setup:
 2. **New → Blueprint**, pick this repository, and confirm. Render asks for `ADA_LLM_API_KEY`: paste a key for model-written explanations, or leave it empty for rule-based text.
 3. When the first deploy finishes, the app is at `https://<service-name>.onrender.com`.
 
-Every push to `main` redeploys it. On the free plan the service sleeps after 15 minutes without visitors and takes about a minute to wake, has 512 MB of memory, and starts with an empty database after each restart or redeploy, which matters little since analyses expire after an hour anyway.
+Every push to `main` redeploys it. On the free plan a service sleeps after 15 minutes without visitors and takes about a minute to wake; this app prevents that by requesting its own public address (`RENDER_EXTERNAL_URL`, which Render sets) every 10 minutes while it runs (`app/keep_awake.py`; change with `ADA_KEEP_AWAKE_MINUTES`, `0` turns it off). A GitHub Actions job pings it too, as a backup. One service kept up all month uses about 744 of the free plan's 750 instance hours. The free plan also has 512 MB of memory, and starts with an empty database after each restart or redeploy, which matters little since analyses expire after an hour anyway.
 
 ### Tests
 

@@ -1,11 +1,12 @@
 name: Keep awake
 
-# Render's free plan puts the site to sleep after 15 minutes without visitors,
-# and waking it takes about a minute. A request every 10 minutes keeps it up.
-# GitHub can start scheduled runs a few minutes late, which still fits.
+# Backup only: the app keeps itself awake on Render (backend/app/keep_awake.py).
+# GitHub delays and sometimes skips frequent scheduled runs, so this can't be
+# relied on alone; it helps wake the site if it ever does fall asleep.
+# Minutes 7, 17, 27...: GitHub drops the most runs at the top of the hour.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "7-59/10 * * * *"
   workflow_dispatch:
 
 permissions: {}

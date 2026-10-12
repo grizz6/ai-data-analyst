@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     sample_data_path: str = str(BACKEND_DIR.parent / "sample-data" / "sales_sample.csv")
     # SQLite file holding stored analyses; ":memory:" keeps them in memory only.
     database_path: str = str(BACKEND_DIR / "data" / "ada.sqlite3")
+    # Request the app's own public address this often so a free Render service
+    # never goes to sleep (see app/keep_awake.py). Empty URL: use RENDER_EXTERNAL_URL.
+    keep_awake_url: str = ""
+    keep_awake_minutes: float = 10
     session_ttl_minutes: int = 60
     max_sessions: int = 20
     # Requests allowed per visitor (IP address) per hour; 0 turns a limit off.
