@@ -18,6 +18,7 @@ from app.services import (
     statistics,
     timeaxis,
     timeseries,
+    visuals,
 )
 from app.services.ingestion import df_preview_records
 from app.workload import run_in_slot
@@ -63,6 +64,9 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     time_series = timeseries.analyze_time_series(metrics_df, axis) if axis else []
     clustering = ml.cluster(metrics_df)
     model_targets = modeling.suggest_targets(metrics_df)
+    tab_charts = visuals.build_visuals(
+        raw_df, metrics_df, quality_issues, statistical_tests, clustering, axis, identifiers
+    )
     rule_insights = insights.generate_rule_insights(
         prepared_df,
         quality_issues,
@@ -134,6 +138,7 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         time_series=time_series,
         clustering=clustering,
         model_targets=model_targets,
+        visuals=tab_charts,
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

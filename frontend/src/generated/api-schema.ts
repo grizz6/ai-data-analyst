@@ -248,6 +248,10 @@ export interface components {
             time_series: components["schemas"]["TimeSeriesAnalysis"][];
             /** Trends */
             trends: components["schemas"]["TrendInsight"][];
+            /** Visuals */
+            visuals: {
+                [key: string]: components["schemas"]["ChartSpec"][];
+            };
         };
         /** Body_upload_dataset_api_upload_post */
         Body_upload_dataset_api_upload_post: {
@@ -330,6 +334,8 @@ export interface components {
         };
         /** ClusterAnalysis */
         ClusterAnalysis: {
+            /** Centers */
+            centers: number[][];
             chart: components["schemas"]["ChartSpec"] | null;
             /** Clear */
             clear: boolean;
@@ -339,6 +345,8 @@ export interface components {
             features: string[];
             /** K */
             k: number;
+            /** K Scores */
+            k_scores: number[];
             /** Pca Explained */
             pca_explained: number[];
             /** Rows Used */

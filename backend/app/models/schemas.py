@@ -260,6 +260,10 @@ class ClusterAnalysis(ApiModel):
     clusters: list[ClusterProfile] = Field(default_factory=list)
     # Share of the variation each principal component captures.
     pca_explained: list[float] = Field(default_factory=list)
+    # Silhouette score for each number of groups tried, starting at 2.
+    k_scores: list[float] = Field(default_factory=list)
+    # Each group's average of every feature, in standard deviations from the overall average.
+    centers: list[list[float]] = Field(default_factory=list)
     chart: ChartSpec | None = None
     summary: str
 
@@ -358,6 +362,8 @@ class AnalysisResult(ApiModel):
     time_axis: TimeAxisInfo | None = None
     time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
     clustering: ClusterAnalysis | None = None
+    # Charts for each dashboard tab ("overview", "quality", "explore", "relationships", "clustering").
+    visuals: dict[str, list[ChartSpec]] = Field(default_factory=dict)
     # Columns worth predicting, most likely first; the Models tab trains the first one.
     model_targets: list[TargetSuggestion] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]

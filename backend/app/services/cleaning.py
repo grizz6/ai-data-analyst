@@ -10,6 +10,8 @@ export. Filled values never feed a statistic: a median-filled column has an
 artificially small spread and a spike at its median.
 """
 
+import re
+import warnings
 from collections.abc import Collection
 
 import pandas as pd
@@ -19,6 +21,18 @@ from app.models.schemas import CleaningAction
 from app.services import semantics
 
 DATE_NAME_HINTS = ("date", "time", "timestamp")
+# Columns without a date-like name still count as dates when their values look
+# like dates, so "signup" or "joined_on" holding 2024-01-05 isn't left as text.
+DATE_VALUE_PATTERN = re.compile(
+    r"^\s*(?:"
+    r"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?"  # 2024-01-05[ 10:30]
+    r"|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}(?: \d{1,2}:\d{2}(?::\d{2})?)?"  # 01/05/2024, 5.1.24
+    r"|\d{1,2} [A-Za-z]{3,9},? \d{4}"  # 5 Jan 2024
+    r"|[A-Za-z]{3,9} \d{1,2},? \d{4}"  # Jan 5, 2024
+    r")\s*$"
+)
+DATE_VALUE_SHARE = 0.9
+DATE_SNIFF_ROWS = 500
 # Share of the non-missing values that must parse before a column becomes a date column.
 DATE_PARSE_THRESHOLD = 0.8
 
@@ -73,12 +87,13 @@ def prepare_dataframe(
     for col in cleaned.columns:
         if cleaned[col].dtype != object:
             continue
-        if not any(token in str(col).lower() for token in DATE_NAME_HINTS):
-            continue
         present = cleaned[col].notna()
         if not present.any():
             continue
-        parsed = pd.to_datetime(cleaned[col], errors="coerce")
+        named = any(token in str(col).lower() for token in DATE_NAME_HINTS)
+        if not named and not _values_look_like_dates(cleaned[col]):
+            continue
+        parsed = _parse_dates(cleaned[col])
         if parsed[present].notna().mean() > DATE_PARSE_THRESHOLD:
             cleaned[col] = parsed
             actions.append(
@@ -90,6 +105,27 @@ def prepare_dataframe(
             )
 
     return cleaned, actions
+
+
+def _parse_dates(series: pd.Series) -> pd.Series:
+    """Parse with the format pandas infers from the first value; if that misses many
+    values (formats vary, or some carry a time zone), parse each value on its own."""
+    present = series.notna()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        parsed = pd.to_datetime(series, errors="coerce")
+        if parsed[present].notna().mean() > DATE_PARSE_THRESHOLD:
+            return parsed
+        # utc=True lines up values with and without a zone; the zone is then dropped.
+        mixed = pd.to_datetime(series, errors="coerce", format="mixed", utc=True)
+    return mixed.dt.tz_localize(None)
+
+
+def _values_look_like_dates(series: pd.Series) -> bool:
+    sample = series.dropna().astype(str).head(DATE_SNIFF_ROWS)
+    if sample.empty:
+        return False
+    return bool(sample.str.match(DATE_VALUE_PATTERN.pattern).mean() >= DATE_VALUE_SHARE)
 
 
 def fill_missing(

@@ -130,3 +130,11 @@ def test_pipeline_uses_date_parts_and_does_not_analyze_them_as_values():
     assert result.time_axis.label == "year + month"
     assert [t.column for t in result.time_series] == ["sales"]
     assert result.time_series[0].frequency == "monthly"
+
+
+def test_rows_over_time_chart_for_each_span():
+    for periods, freq in ((60, "D"), (400, "D"), (100, "MS")):
+        dates = pd.date_range("2020-01-01", periods=periods, freq=freq)
+        csv = pd.DataFrame({"when": dates.astype(str), "v": rng.normal(size=periods)}).to_csv(index=False).encode()
+        result = compute_analysis(csv, "t.csv")
+        assert "rows_over_time" in [c.id for c in result.visuals["explore"]]

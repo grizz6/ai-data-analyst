@@ -53,12 +53,14 @@ def cluster(df: pd.DataFrame) -> ClusterAnalysis | None:
     rng = np.random.default_rng(SEED)
     check = rng.choice(len(scaled), size=min(len(scaled), SILHOUETTE_MAX_ROWS), replace=False)
     best = None
+    k_scores: list[float] = []
     for k in K_RANGE:
         if k >= len(scaled):
             break
         model = KMeans(n_clusters=k, n_init=3, random_state=SEED).fit(scaled)
         with sklearn.config_context(working_memory=SKLEARN_WORKING_MEMORY_MB):
             score = float(silhouette_score(scaled[check], model.labels_[check]))
+        k_scores.append(round(score, 4))
         if best is None or score > best[1]:
             best = (k, score, model.labels_)
     if best is None:
@@ -77,6 +79,11 @@ def cluster(df: pd.DataFrame) -> ClusterAnalysis | None:
         clear=clear,
         clusters=profiles,
         pca_explained=[round(float(v), 4) for v in pca.explained_variance_ratio_],
+        k_scores=k_scores,
+        centers=[
+            [round(float(v), 3) for v in scaled[labels == cluster_id].mean(axis=0)]
+            for cluster_id in sorted(set(labels.tolist()))
+        ],
         chart=_cluster_chart(coords, labels, pca.explained_variance_ratio_),
         summary="",
     )

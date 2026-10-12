@@ -642,7 +642,28 @@
         "layout": {}
       }
     },
-    "summary": "The rows fall into 3 groups (silhouette 0.87). The largest, 60 rows, stands out for units high, sales low. The first two principal components capture 100% of the variation."
+    "summary": "The rows fall into 3 groups (silhouette 0.87). The largest, 60 rows, stands out for units high, sales low. The first two principal components capture 100% of the variation.",
+    "k_scores": [
+      0.21,
+      0.8686,
+      0.2,
+      0.18,
+      0.17
+    ],
+    "centers": [
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0
+      ]
+    ]
   },
   "time_axis": {
     "kind": "dates",
@@ -672,5 +693,159 @@
       "task": "classification",
       "reason": "can be predicted"
     }
-  ]
+  ],
+  "visuals": {
+    "overview": [
+      {
+        "id": "column_types",
+        "title": "Column types",
+        "chart_type": "pie",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "row_completeness",
+        "title": "Rows",
+        "chart_type": "pie",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      }
+    ],
+    "quality": [
+      {
+        "id": "missing_by_column",
+        "title": "Missing values per column",
+        "chart_type": "bar",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "outliers_by_column",
+        "title": "Outliers per column",
+        "chart_type": "bar",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      }
+    ],
+    "explore": [
+      {
+        "id": "histograms",
+        "title": "Distribution of every numeric column",
+        "chart_type": "histogram",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "category_counts",
+        "title": "Count of each category",
+        "chart_type": "bar",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "box_plots",
+        "title": "Spread and outliers of every numeric column",
+        "chart_type": "box",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "rows_over_time",
+        "title": "Rows per week",
+        "chart_type": "bar",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "id": "corr_pearson",
+        "title": "Correlation: Pearson (straight-line)",
+        "chart_type": "heatmap",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "corr_spearman",
+        "title": "Correlation: Spearman (rank, any monotonic shape)",
+        "chart_type": "heatmap",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "scatter_matrix",
+        "title": "Scatter matrix (colour: region)",
+        "chart_type": "scatter",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "group_product_sales",
+        "title": "sales by product (\u03b7\u00b2 0.69)",
+        "chart_type": "box",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "group_product_units",
+        "title": "units by product (\u03b7\u00b2 0.58)",
+        "chart_type": "box",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "group_region_units",
+        "title": "units by region (\u03b7\u00b2 0.58)",
+        "chart_type": "box",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "cramers_v",
+        "title": "Association between categories (Cram\u00e9r's V)",
+        "chart_type": "heatmap",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      },
+      {
+        "id": "crosstab",
+        "title": "product within each region",
+        "chart_type": "bar",
+        "plotly_json": {
+          "data": [],
+          "layout": {}
+        }
+      }
+    ]
+  }
 }

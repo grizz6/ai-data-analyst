@@ -1,6 +1,7 @@
 import pandas as pd
+import pytest
 
-from app.services.cleaning import clean_dataframe
+from app.services.cleaning import clean_dataframe, prepare_dataframe
 from app.services.pipeline import compute_analysis
 from tests.builders import with_nulls
 
@@ -74,3 +75,26 @@ def test_date_named_column_is_parsed():
     cleaned, actions = clean_dataframe(df)
     assert pd.api.types.is_datetime64_any_dtype(cleaned["order_date"])
     assert [a.column for a in actions_by_type(actions, "parse_datetime")] == ["order_date"]
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["2022-01-01", "2022-01-02", "2022-03-15"],
+        ["2022-01-01 10:30", "2022-01-02 11:00:05", "2022-03-15T08:00:00Z"],
+        ["01/05/2024", "02/06/2024", "12/31/2024"],
+        ["5 Jan 2024", "6 February 2024", "31 Dec 2024"],
+        ["Jan 5, 2024", "Feb 6, 2024", "Dec 31 2024"],
+    ],
+)
+def test_dates_are_found_by_their_values_whatever_the_column_is_called(values):
+    df = pd.DataFrame({"signup": values * 5, "v": range(15)})
+    prepared, actions = prepare_dataframe(df)
+    assert pd.api.types.is_datetime64_any_dtype(prepared["signup"])
+    assert any(a.action == "parse_datetime" and a.column == "signup" for a in actions)
+
+
+@pytest.mark.parametrize("values", [["A-12", "B-7", "C-3"], ["1.5", "2.5", "3.5"], ["Q1 2024", "Q2 2024", "Q3 2024"]])
+def test_text_that_isnt_a_date_is_left_alone(values):
+    prepared, _ = prepare_dataframe(pd.DataFrame({"code": values * 5}))
+    assert not pd.api.types.is_datetime64_any_dtype(prepared["code"])
