@@ -1,19 +1,8 @@
 import { lazy, Suspense } from "react";
 import { formatP } from "../format";
-import type { Explanation, TimeSeriesAnalysis } from "../types";
+import type { TimeSeriesAnalysis } from "../types";
 
 const ChartGrid = lazy(() => import("./ChartGrid"));
-
-const NO_NOTES: Explanation = {
-  dataset_overview: "",
-  analysis_summary: "",
-  recommendations: [],
-  chart_explanations: [],
-  configured: false,
-  source: "rule_based",
-  model: null,
-  fallback_reason: null,
-};
 
 function Fact({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -60,7 +49,7 @@ export default function TimeSeriesPanel({ series }: { series: TimeSeriesAnalysis
             <Fact label="Forecast" value={ts.forecast.length ? `${ts.forecast.length} periods` : "none"} hint={ts.forecast_method} />
           </div>
           <Suspense fallback={<p className="muted">Loading charts…</p>}>
-            <ChartGrid charts={ts.charts} explanation={NO_NOTES} />
+            <ChartGrid charts={ts.charts} />
           </Suspense>
         </section>
       ))}

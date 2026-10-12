@@ -52,3 +52,21 @@ def test_identifiers_are_counted_but_not_charted():
     assert dict(zip(pie["labels"], pie["values"], strict=True)) == {"numbers": 1, "identifiers": 1}
     hist = next(c for c in result.visuals["explore"] if c.id == "histograms")
     assert "order_id" not in str(hist.plotly_json["layout"])
+
+
+def test_scatter_matrix_uses_plain_scatter_traces():
+    # The app ships Plotly's cartesian build, which has no splom trace.
+    df = pd.DataFrame(rng.normal(size=(120, 3)), columns=["p", "q", "r"])
+    df["kind"] = ["x", "y", "z"] * 40
+    result = compute_analysis(df.to_csv(index=False).encode(), "pairs.csv")
+    matrix = next(c for c in result.visuals["relationships"] if c.id == "scatter_matrix")
+    traces = matrix.plotly_json["data"]
+    assert {t["type"] for t in traces} == {"scatter"}
+    assert len(traces) == 3 * 3  # three pairs, one trace per category
+    assert sum(bool(t.get("showlegend")) for t in traces) == 3
+
+
+def test_quality_charts_are_skipped_when_there_is_nothing_to_show():
+    df = pd.DataFrame({"a": np.arange(60.0), "b": np.arange(60.0) * 2})
+    result = compute_analysis(df.to_csv(index=False).encode(), "clean.csv")
+    assert "quality" not in result.visuals

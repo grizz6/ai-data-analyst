@@ -52,7 +52,6 @@ function renderPanel(autoTrain = false) {
     <MachineLearningPanel
       sessionId={result.session_id}
       columns={result.columns}
-      clustering={result.clustering}
       suggestions={result.model_targets}
       autoTrain={autoTrain}
     />,
@@ -61,12 +60,6 @@ function renderPanel(autoTrain = false) {
 }
 
 describe("MachineLearningPanel", () => {
-  it("shows the groups found, with what makes each stand out", async () => {
-    renderPanel();
-    expect(screen.getByText(/fall into 3 groups/)).toBeInTheDocument();
-    expect(screen.getAllByText(/^Group \d$/)).toHaveLength(3);
-  });
-
   it("trains the suggested target straight away and shows train, CV and test scores", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(report));
     vi.stubGlobal("fetch", fetchMock);
@@ -80,7 +73,7 @@ describe("MachineLearningPanel", () => {
     const tree = within(results).getByText("Decision tree").closest("tr") as HTMLElement;
     expect(within(tree).getByText("overfits")).toBeInTheDocument();
     expect(within(results).getByText("RMSE")).toBeInTheDocument();
-    expect(within(results).getByTestId("charts")).toHaveTextContent("Models compared (R²)");
+    expect(await within(results).findByTestId("charts")).toHaveTextContent("Models compared (R²)");
   });
 
   it("lists suggested targets first, and trains another on request", async () => {
@@ -103,11 +96,5 @@ describe("MachineLearningPanel", () => {
     await userEvent.selectOptions(screen.getByLabelText("Column to predict"), "region");
     await userEvent.click(screen.getByRole("button", { name: "Train and compare" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("needs at least two values");
-  });
-
-  it("explains when there's nothing to group", () => {
-    const result = sampleResult();
-    render(<MachineLearningPanel sessionId="s" columns={result.columns} clustering={null} suggestions={[]} />);
-    expect(screen.getByText(/needs at least two numeric columns and 50 rows/)).toBeInTheDocument();
   });
 });

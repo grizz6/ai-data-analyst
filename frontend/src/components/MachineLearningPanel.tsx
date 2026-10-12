@@ -1,31 +1,22 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { trainModel } from "../api";
 import { formatNumber } from "../format";
-import type { ClusterAnalysis, ColumnProfile, Explanation, ModelReport, TargetSuggestion } from "../types";
+import type { ColumnProfile, ModelReport, TargetSuggestion } from "../types";
+import Hint from "./Hint";
 
 const ChartGrid = lazy(() => import("./ChartGrid"));
-
-const NO_NOTES: Explanation = {
-  dataset_overview: "",
-  analysis_summary: "",
-  recommendations: [],
-  chart_explanations: [],
-  configured: false,
-  source: "rule_based",
-  model: null,
-  fallback_reason: null,
-};
 
 interface Props {
   sessionId: string;
   columns: ColumnProfile[];
-  clustering: ClusterAnalysis | null;
   suggestions: TargetSuggestion[];
   /** Train the first suggested target as soon as the panel appears. */
   autoTrain?: boolean;
+  /** False while the panel sits on a hidden tab: charts drawn then would have no size. */
+  visible?: boolean;
 }
 
-export default function MachineLearningPanel({ sessionId, columns, clustering, suggestions, autoTrain = false }: Props) {
+export default function MachineLearningPanel({ sessionId, columns, suggestions, autoTrain = false, visible = true }: Props) {
   const suggested = suggestions.map((t) => t.column);
   const others = columns
     .filter((c) => !c.is_identifier && !c.dtype.startsWith("datetime") && !suggested.includes(c.name))
@@ -61,60 +52,10 @@ export default function MachineLearningPanel({ sessionId, columns, clustering, s
   return (
     <>
       <section className="stats-section">
-        <h3>Groups of similar rows</h3>
-        {clustering ? (
-          <>
-            <p>{clustering.summary}</p>
-            <p className="panel-lead">
-              K-means on {clustering.features.length} numeric columns ({clustering.rows_used.toLocaleString()} rows),
-              with the number of groups picked by silhouette score (−1 to 1; under 0.25 means no real grouping).
-            </p>
-            {clustering.clear && (
-              <div className="scroll-table">
-                <table className="data">
-                  <thead>
-                    <tr>
-                      <th>Group</th>
-                      <th className="num">Rows</th>
-                      <th>Stands out for</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clustering.clusters.map((c) => (
-                      <tr key={c.cluster}>
-                        <td>Group {c.cluster}</td>
-                        <td className="num">{c.size.toLocaleString()}</td>
-                        <td>
-                          {c.distinctive
-                            .map((d) => {
-                              const sd = Number(d.sd_from_average);
-                              return `${d.column} ${sd > 0 ? "high" : "low"} (avg ${formatNumber(Number(d.mean))}, ${sd > 0 ? "+" : ""}${sd.toFixed(1)} SD)`;
-                            })
-                            .join(" · ")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            {clustering.chart && (
-              <Suspense fallback={<p className="muted">Loading chart…</p>}>
-                <ChartGrid charts={[clustering.chart]} explanation={NO_NOTES} />
-              </Suspense>
-            )}
-          </>
-        ) : (
-          <p className="muted">Grouping needs at least two numeric columns and 50 rows.</p>
-        )}
-      </section>
-
-      <section className="stats-section">
-        <h3>Predict a column</h3>
-        <p className="panel-lead">
-          Pick a column to predict from the others. A baseline, k-nearest neighbours, a linear model and a random forest
-          are compared with cross-validation, so the scores reflect rows each model didn't see.
-        </p>
+        <h3>
+          Predict a column{" "}
+          <Hint text="80% of rows train each model (with cross-validation); the other 20% are held back to test it. The best model is picked by cross-validation, never by the test rows." />
+        </h3>
         <div className="builder-form">
           <label className="builder-field" htmlFor="ml-target">
             <span>Column to predict</span>
@@ -149,7 +90,7 @@ export default function MachineLearningPanel({ sessionId, columns, clustering, s
             {error}
           </p>
         )}
-        {report && <ModelResults report={report} />}
+        {report && <ModelResults report={report} showCharts={visible} />}
       </section>
     </>
   );
@@ -159,7 +100,7 @@ function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-function ModelResults({ report }: { report: ModelReport }) {
+function ModelResults({ report, showCharts }: { report: ModelReport; showCharts: boolean }) {
   const classification = report.task === "classification";
   const show = (value: number) => (classification ? pct(value) : value.toFixed(3));
   const best = report.scores.find((s) => s.name === report.best_model)!;
@@ -243,9 +184,11 @@ function ModelResults({ report }: { report: ModelReport }) {
         </table>
       </div>
 
-      <Suspense fallback={<p className="muted">Loading charts…</p>}>
-        <ChartGrid charts={report.charts} explanation={NO_NOTES} />
-      </Suspense>
+      {showCharts && (
+        <Suspense fallback={<p className="muted">Loading charts…</p>}>
+          <ChartGrid charts={report.charts} />
+        </Suspense>
+      )}
       {report.notes.length > 0 && <p className="muted small">{report.notes.join(" ")}</p>}
     </div>
   );

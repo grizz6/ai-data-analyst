@@ -20,7 +20,8 @@ export function themedLayout(layout: Layout = {}): Layout {
     font: { color: "#e8eef5", size: 11 },
     colorway: CHART_COLORS,
     margin: { t: 36, r: 16, b: 40, l: 48 },
-    height: 320,
+    // Grids of small charts set their own height; everything else is one size.
+    height: typeof layout.height === "number" ? layout.height : 320,
     hoverlabel: { bgcolor: "#1a2533", bordercolor: "#2a3a4f", font: { color: "#e8eef5" } },
   };
   // Subplots carry xaxis2, yaxis3 and so on; style every axis, not just the first.
@@ -32,10 +33,20 @@ export function themedLayout(layout: Layout = {}): Layout {
   return themed;
 }
 
-/** Recolor single-color traces (bars, histograms, boxes) that Plotly Express pinned to its default blue. */
+/**
+ * Recolor single-color traces (bars, histograms, boxes) that Plotly Express pinned to its default blue.
+ * Traces in the same legend group (a box and its outlier points, one category across a grid) share a color.
+ */
 export function themedData(data: Layout[]): Layout[] {
-  return data.map((trace, i) => {
-    const color = CHART_COLORS[i % CHART_COLORS.length];
+  const groupColors = new Map<unknown, string>();
+  let next = 0;
+  return data.map((trace) => {
+    const group = trace.legendgroup;
+    let color = group !== undefined ? groupColors.get(group) : undefined;
+    if (color === undefined) {
+      color = CHART_COLORS[next++ % CHART_COLORS.length];
+      if (group !== undefined) groupColors.set(group, color);
+    }
     const marker = (trace.marker as Layout | undefined) ?? {};
     // Heatmaps and anything colored by value keep their own scale.
     if (trace.type === "heatmap" || Array.isArray(marker.color)) return trace;

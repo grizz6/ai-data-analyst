@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from "react";
 import { buildChart } from "../api";
-import type { ChartSpec, ColumnProfile, CustomChartRequest, Explanation } from "../types";
+import type { ChartSpec, ColumnProfile, CustomChartRequest } from "../types";
 
 // Shares the lazily loaded Plotly chunk with the main chart grid.
 const ChartGrid = lazy(() => import("./ChartGrid"));
@@ -25,16 +25,6 @@ const AGGREGATES: { value: Exclude<Aggregate, "count">; label: string }[] = [
   { value: "median", label: "Median" },
 ];
 
-const NO_NOTES: Explanation = {
-  dataset_overview: "",
-  analysis_summary: "",
-  recommendations: [],
-  chart_explanations: [],
-  configured: false,
-  source: "rule_based",
-  model: null,
-  fallback_reason: null,
-};
 
 function columnKind(dtype: string): Kind {
   if (dtype.startsWith("datetime")) return "date";
@@ -173,7 +163,7 @@ export default function ChartBuilder({ sessionId, columns }: Props) {
             </button>
           </div>
           <Suspense fallback={<p className="muted">Loading charts…</p>}>
-            <ChartGrid charts={charts} explanation={NO_NOTES} />
+            <ChartGrid charts={charts} />
           </Suspense>
         </>
       )}

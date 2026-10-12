@@ -24,7 +24,7 @@ MAX_GRID = 12
 GRID_COLUMNS = 3
 MAX_CATEGORY_BARS = 12
 SCATTER_MATRIX_COLUMNS = 4
-SCATTER_POINTS = 1_000
+SCATTER_POINTS = 600
 MISSING_MAP_ROWS = 200
 MAX_HEATMAP_COLUMNS = 25
 HISTOGRAM_BINS = 30
@@ -151,10 +151,10 @@ def _completeness(raw: pd.DataFrame) -> ChartSpec | None:
 
 def _missing_by_column(raw: pd.DataFrame) -> ChartSpec | None:
     share = (raw.isna().mean() * 100).round(2).sort_values()
-    if raw.empty:
+    if raw.empty or share.max() == 0:
         return None
     fig = go.Figure(go.Bar(x=share.values, y=[str(c) for c in share.index], orientation="h"))
-    fig.update_layout(xaxis_title="% missing", xaxis_range=[0, 100])
+    fig.update_layout(xaxis_title="% missing")
     return _spec(fig, "missing_by_column", "Missing values per column", "bar", max(300, 24 * len(share)))
 
 
@@ -184,7 +184,7 @@ def _outliers(df: pd.DataFrame, numeric: list[str]) -> ChartSpec | None:
         q1, q3 = values.quantile([0.25, 0.75])
         iqr = q3 - q1
         counts[col] = int(((values < q1 - 1.5 * iqr) | (values > q3 + 1.5 * iqr)).sum())
-    if not counts:
+    if not any(counts.values()):
         return None
     ordered = sorted(counts.items(), key=lambda item: item[1])
     fig = go.Figure(go.Bar(x=[v for _, v in ordered], y=[k for k, _ in ordered], orientation="h"))
@@ -193,7 +193,8 @@ def _outliers(df: pd.DataFrame, numeric: list[str]) -> ChartSpec | None:
 
 
 def _issues(issues: list[QualityIssue]) -> ChartSpec | None:
-    if not issues:
+    # One issue is clearer as a line of text than as a single bar.
+    if len(issues) < 2:
         return None
     frame = pd.DataFrame([{"category": i.category, "severity": i.severity} for i in issues])
     counts = frame.groupby(["category", "severity"]).size().reset_index(name="issues")
@@ -273,6 +274,7 @@ def _box_grid(df: pd.DataFrame, numeric: list[str]) -> ChartSpec | None:
                 boxpoints=False,
                 showlegend=False,
                 name=col,
+                legendgroup=col,
             ),
             **position,
         )
@@ -285,6 +287,7 @@ def _box_grid(df: pd.DataFrame, numeric: list[str]) -> ChartSpec | None:
                     marker={"size": 4, "opacity": 0.5},
                     showlegend=False,
                     name="outliers",
+                    legendgroup=col,
                 ),
                 **position,
             )
@@ -323,15 +326,39 @@ def _correlation_heatmap(
 
 
 def _scatter_matrix(df: pd.DataFrame, numeric: list[str], categorical: list[str]) -> ChartSpec | None:
+    """Every pair of the most varied numeric columns, as a grid of scatter plots.
+
+    Drawn as ordinary scatter traces: the app's Plotly build has no splom trace.
+    """
     if len(numeric) < 2:
         return None
     cols = sorted(numeric, key=lambda c: -float(df[c].std() / (abs(df[c].mean()) + 1e-9)))[:SCATTER_MATRIX_COLUMNS]
-    sample = df.sample(n=min(len(df), SCATTER_POINTS), random_state=SEED)
+    pairs = [(x, y) for i, x in enumerate(cols) for y in cols[i + 1 :]]
     colour = next((c for c in categorical if 2 <= df[c].nunique() <= 8), None)
-    fig = px.scatter_matrix(sample, dimensions=cols, color=colour, opacity=0.55)
-    fig.update_traces(diagonal_visible=False, marker={"size": 4}, showupperhalf=False)
-    title = "Scatter matrix" + (f" (colour: {colour})" if colour else "")
-    return _spec(fig, "scatter_matrix", title, "scatter", 520)
+    sample = df[cols + ([colour] if colour else [])].dropna()
+    sample = sample.sample(n=min(len(sample), SCATTER_POINTS), random_state=SEED)
+    groups = (
+        [(str(name), part) for name, part in sample.groupby(colour, observed=True)] if colour else [("rows", sample)]
+    )
+    rows, ncols = _grid(len(pairs))
+    fig = make_subplots(rows=rows, cols=ncols, subplot_titles=[f"{y} vs {x}" for x, y in pairs])
+    for i, (x, y) in enumerate(pairs):
+        for name, part in groups:
+            fig.add_trace(
+                go.Scatter(
+                    x=part[x].to_numpy(),
+                    y=part[y].to_numpy(),
+                    mode="markers",
+                    name=name,
+                    legendgroup=name,
+                    showlegend=bool(colour) and i == 0,
+                    marker={"size": 4, "opacity": 0.55},
+                ),
+                row=i // ncols + 1,
+                col=i % ncols + 1,
+            )
+    title = "Every pair of numeric columns" + (f" (colour: {colour})" if colour else "")
+    return _spec(fig, "scatter_matrix", title, "scatter", 260 * rows + 80)
 
 
 def _group_boxes(df: pd.DataFrame, statistics: StatisticalTests) -> list[ChartSpec]:

@@ -26,4 +26,16 @@ describe("chart theme", () => {
     expect(heat).toBe(heatmap);
     expect(points).toBe(perPoint);
   });
+
+  it("gives traces in one legend group one color", () => {
+    const [box, outliers, other, again] = themedData([
+      { type: "box", legendgroup: "a" },
+      { type: "scatter", legendgroup: "a" },
+      { type: "box", legendgroup: "b" },
+      { type: "scatter", legendgroup: "b" },
+    ]);
+    expect(outliers.marker).toEqual(box.marker);
+    expect(other.marker).toEqual({ color: CHART_COLORS[1] });
+    expect(again.marker).toEqual({ color: CHART_COLORS[1] });
+  });
 });

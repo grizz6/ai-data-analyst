@@ -1,14 +1,25 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useRef, useState, type KeyboardEvent } from "react";
 import { askQuestion, cleanedCsvUrl, deleteSession, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatNumber, formatP, friendlyType } from "../format";
-import type { AnalysisResult, ChatTurn } from "../types";
+import {
+  clusteringTakeaway,
+  exploreTakeaway,
+  overviewTakeaway,
+  qualityTakeaway,
+  relationshipsTakeaway,
+  timeSeriesTakeaway,
+} from "../takeaways";
+import type { AnalysisResult, ChartSpec, ChatTurn } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
+import ClusteringPanel from "./ClusteringPanel";
 import DataTable from "./DataTable";
+import Hint from "./Hint";
 import MachineLearningPanel from "./MachineLearningPanel";
 import StatisticsPanel from "./StatisticsPanel";
+import Tile from "./Tile";
 import TimeSeriesPanel from "./TimeSeriesPanel";
 
 /** A few questions this file can answer, built from its own columns. */
@@ -24,6 +35,27 @@ export function suggestedQuestions(result: AnalysisResult): string[] {
   questions.push("What should I look into first?");
   return questions;
 }
+
+const AXIS_KINDS: Record<string, string> = {
+  dates: "date column",
+  date_parts: "date parts",
+  epoch: "Unix time",
+  year: "year column",
+  step_column: "step column",
+  row_order: "row order",
+};
+
+type TabId =
+  | "overview"
+  | "quality"
+  | "explore"
+  | "relationships"
+  | "time-series"
+  | "clustering"
+  | "models"
+  | "build"
+  | "ask"
+  | "data";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -44,6 +76,15 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? "Copied" : "Copy"}
     </button>
+  );
+}
+
+function Charts({ charts, result }: { charts: ChartSpec[]; result?: AnalysisResult }) {
+  if (charts.length === 0) return null;
+  return (
+    <Suspense fallback={<p className="muted">Loading charts…</p>}>
+      <ChartGrid charts={charts} explanation={result?.explanation} />
+    </Suspense>
   );
 }
 
@@ -103,22 +144,67 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     }
   };
 
-  const asked = new Set(thread.map((t) => t.question));
-  const suggestions = suggestedQuestions(result).filter((q) => !asked.has(q));
-  const sections: [string, string][] = [
-    ["summary", "Summary"],
-    ["quality", "Quality"],
-    ["insights", "Insights"],
-    ...(result.numeric_summaries.length > 0 ? [["statistics", "Statistics"] as [string, string]] : []),
-    ["tests", "Tests"],
-    ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [string, string]] : []),
-    ["machine-learning", "ML"],
-    ["charts", "Charts"],
-    ["chart-builder", "Build a chart"],
+  const visuals = result.visuals ?? {};
+  const tabs: [TabId, string][] = [
+    ["overview", "Overview"],
+    ["quality", "Data quality"],
+    ["explore", "Explore"],
+    ["relationships", "Relationships"],
+    ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [TabId, string]] : []),
+    ["clustering", "Clustering"],
+    ["models", "Models"],
+    ["build", "Build a chart"],
     ["ask", "Ask"],
     ["data", "Data"],
-    ["columns", "Columns"],
   ];
+  const [tab, setTab] = useState<TabId>(() => {
+    const fromHash = window.location.hash.slice(1);
+    return (tabs.find(([id]) => id === fromHash)?.[0] ?? "overview") as TabId;
+  });
+  const tabButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const choose = (id: TabId) => {
+    setTab(id);
+    window.history.replaceState(null, "", `#${id}`);
+  };
+  const onTabKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const index = tabs.findIndex(([id]) => id === tab);
+    const next = tabs[(index + step + tabs.length) % tabs.length][0];
+    choose(next);
+    tabButtons.current[next]?.focus();
+  };
+
+  const asked = new Set(thread.map((t) => t.question));
+  const suggestions = suggestedQuestions(result).filter((q) => !asked.has(q));
+
+  const kinds = result.columns.reduce<Record<string, number>>((acc, c) => {
+    const kind = c.is_identifier ? "Identifier" : friendlyType(c.dtype);
+    acc[kind] = (acc[kind] ?? 0) + 1;
+    return acc;
+  }, {});
+  const totalCells = result.columns.reduce((sum, c) => sum + c.null_count + c.non_null_count, 0);
+  const missingCells = result.columns.reduce((sum, c) => sum + c.null_count, 0);
+  const missingPct = totalCells ? (missingCells / totalCells) * 100 : 0;
+  const toCheck = result.quality_issues.filter((i) => i.severity === "error" || i.severity === "warning").length;
+  const skewed = result.statistics.distributions.filter((d) => Math.abs(d.skewness ?? 0) >= 1).length;
+  const extremes = result.statistics.distributions.reduce((sum, d) => sum + d.zscore_outliers, 0);
+  const strongest = [...result.correlations].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))[0];
+  const realPairs = result.correlations.filter((c) => c.p_value !== null && c.p_value < 0.05).length;
+  const realGroups = result.statistics.group_differences.filter((g) => g.p_adjusted !== null && g.p_adjusted < 0.05).length;
+  const realAssociations = result.statistics.categorical_associations.filter(
+    (a) => a.p_adjusted !== null && a.p_adjusted < 0.05,
+  ).length;
+  const seasonal = result.time_series.filter((t) => (t.seasonal_strength ?? 0) >= 0.4).length;
+
+  const panelProps = (id: TabId) => ({
+    id: `tab-${id}`,
+    role: "tabpanel",
+    "aria-labelledby": `tab-button-${id}`,
+    className: "panel tab-panel",
+  });
 
   return (
     <>
@@ -186,333 +272,356 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </p>
       )}
 
-      <div className="stats">
-        <div className={`stat ${result.quality_issues.length > 0 ? "attention" : "good"}`}>
-          <div className="label">Quality issues</div>
-          <div className="value">{result.quality_issues.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Cleaning steps</div>
-          <div className="value">{result.cleaning_actions.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Charts</div>
-          <div className="value">{result.charts.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Insights</div>
-          <div className="value">{result.rule_insights.length}</div>
-        </div>
-      </div>
-
-      <nav className="section-nav" aria-label="Jump to section">
-        {sections.map(([id, label]) => (
-          <a
+      <div className="dash-tabs" role="tablist" aria-label="Analysis sections">
+        {tabs.map(([id, label]) => (
+          <button
             key={id}
-            href={`#${id}`}
-            onClick={() => {
-              // Jumping to a collapsed section opens it.
-              const target = document.getElementById(id);
-              if (target instanceof HTMLDetailsElement) target.open = true;
+            ref={(el) => {
+              tabButtons.current[id] = el;
             }}
+            id={`tab-button-${id}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls={`tab-${id}`}
+            tabIndex={tab === id ? 0 : -1}
+            className={tab === id ? "dash-tab active" : "dash-tab"}
+            onClick={() => choose(id)}
+            onKeyDown={onTabKey}
           >
             {label}
-          </a>
+          </button>
         ))}
-      </nav>
-
-      <div id="summary" className="panel">
-        <h2>Summary</h2>
-        <p className="source-note">
-          {result.explanation.source === "llm"
-            ? `Written by ${result.explanation.model} from the computed results; every number in it was checked.`
-            : result.explanation.configured && result.explanation.fallback_reason
-              ? `Rule-based: the language model's text wasn't used (${result.explanation.fallback_reason}).`
-              : "Rule-based summary. Set an LLM API key on the server for a written explanation."}
-        </p>
-        <p>{result.explanation.dataset_overview}</p>
-        <h3>Key findings</h3>
-        <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
-        {result.explanation.recommendations.length > 0 && (
-          <>
-            <h3>Recommendations</h3>
-            <ul>
-              {result.explanation.recommendations.map((r, i) => (
-                <li key={i}>{r}</li>
-              ))}
-            </ul>
-          </>
-        )}
       </div>
 
-      <div id="quality" className="grid-2">
-        <div className="panel">
-          <h2>Data quality</h2>
-          {result.quality_issues.length === 0 ? (
-            <p className="empty-good">
-              <span aria-hidden="true">✓</span> No issues found.
+      {tab === "overview" && (
+        <section {...panelProps("overview")}>
+          <p className="takeaway">{overviewTakeaway(result)}</p>
+          <div className="stats">
+            <Tile label="Rows" value={result.row_count.toLocaleString()} />
+            <Tile label="Columns" value={String(result.column_count)} />
+            {Object.entries(kinds).map(([kind, count]) => (
+              <Tile key={kind} label={kind} value={String(count)} />
+            ))}
+            <Tile label="Quality issues" value={String(result.quality_issues.length)} tone={toCheck ? "attention" : "good"} />
+          </div>
+          <Charts charts={[...(visuals.overview ?? []), ...result.charts]} result={result} />
+          <details className="summary-details">
+            <summary>Summary and key findings</summary>
+            <p className="source-note">
+              {result.explanation.source === "llm"
+                ? `Written by ${result.explanation.model} from the computed results; every number in it was checked.`
+                : result.explanation.configured && result.explanation.fallback_reason
+                  ? `Rule-based: the language model's text wasn't used (${result.explanation.fallback_reason}).`
+                  : "Rule-based summary. Set an LLM API key on the server for a written explanation."}
             </p>
-          ) : (
-            <ul className="issue-list">
-              {result.quality_issues.map((issue, i) => (
+            <p>{result.explanation.dataset_overview}</p>
+            <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
+            {result.rule_insights.length > 0 && (
+              <>
+                <h4>Key findings</h4>
+                <ul className="insight-list">
+                  {result.rule_insights.map((insight, i) => (
+                    <li key={i}>
+                      <strong>{insight.title}:</strong> {insight.message}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {result.explanation.recommendations.length > 0 && (
+              <ul>
+                {result.explanation.recommendations.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            )}
+          </details>
+        </section>
+      )}
+
+      {tab === "quality" && (
+        <section {...panelProps("quality")}>
+          <p className="takeaway">{qualityTakeaway(result)}</p>
+          <div className="stats">
+            <Tile label="Issues" value={String(result.quality_issues.length)} tone={toCheck ? "attention" : "good"} />
+            <Tile label="To check" value={String(toCheck)} hint="Issues marked warning or error" />
+            <Tile label="Missing cells" value={`${formatNumber(Math.round(missingPct * 100) / 100)}%`} />
+            <Tile label="Cleaning steps" value={String(result.cleaning_actions.length)} />
+          </div>
+          <Charts charts={visuals.quality ?? []} />
+          <div className="grid-2">
+            <div>
+              <h3>Issues</h3>
+              {result.quality_issues.length === 0 ? (
+                <p className="empty-good">
+                  <span aria-hidden="true">✓</span> No issues found.
+                </p>
+              ) : (
+                <ul className="issue-list">
+                  {result.quality_issues.map((issue, i) => (
+                    <li key={i}>
+                      <span className={`badge ${issue.severity}`}>{issue.severity}</span> {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h3>
+                Cleaning <Hint text="Applied to the cleaned copy only; the statistics use your data as recorded." />
+              </h3>
+              {result.cleaning_actions.length === 0 ? (
+                <p className="empty-good">
+                  <span aria-hidden="true">✓</span> No cleaning was needed.
+                </p>
+              ) : (
+                <ul className="insight-list">
+                  {result.cleaning_actions.map((a, i) => (
+                    <li key={i}>{a.description}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {tab === "explore" && (
+        <section {...panelProps("explore")}>
+          <p className="takeaway">{exploreTakeaway(result)}</p>
+          <div className="stats">
+            <Tile label="Numeric columns" value={String(result.numeric_summaries.length)} />
+            <Tile label="Category columns" value={String(result.categorical_summaries.length)} />
+            <Tile label="Skewed" value={String(skewed)} hint="Columns with skewness of 1 or more either way" />
+            <Tile label="Extreme values" value={extremes.toLocaleString()} hint="Values more than 3 standard deviations from their column's mean" />
+          </div>
+          {result.numeric_summaries.length > 0 && (
+            <div className="scroll-table">
+              <table className="data" aria-label="Numeric statistics">
+                <thead>
+                  <tr>
+                    <th>Column</th>
+                    <th className="num">Mean</th>
+                    <th className="num">Median</th>
+                    <th className="num">Std dev</th>
+                    <th className="num">Min</th>
+                    <th className="num">25%</th>
+                    <th className="num">75%</th>
+                    <th className="num">Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.numeric_summaries.map((s) => (
+                    <tr key={s.column}>
+                      <td>{s.column}</td>
+                      <td className="num">{formatNumber(s.mean)}</td>
+                      <td className="num">{formatNumber(s.median)}</td>
+                      <td className="num">{formatNumber(s.std)}</td>
+                      <td className="num">{formatNumber(s.min)}</td>
+                      <td className="num">{formatNumber(s.q25)}</td>
+                      <td className="num">{formatNumber(s.q75)}</td>
+                      <td className="num">{formatNumber(s.max)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Charts charts={visuals.explore ?? []} />
+        </section>
+      )}
+
+      {tab === "relationships" && (
+        <section {...panelProps("relationships")}>
+          <p className="takeaway">{relationshipsTakeaway(result)}</p>
+          <div className="stats">
+            <Tile
+              label="Strongest r"
+              value={strongest ? strongest.correlation.toFixed(2) : "–"}
+              hint={strongest ? `${strongest.column_a} ↔ ${strongest.column_b}` : undefined}
+            />
+            <Tile label="Linked pairs" value={String(realPairs)} hint="Numeric pairs with a correlation unlikely to be chance (p < 0.05)" />
+            <Tile label="Group gaps" value={String(realGroups)} hint="Numbers that differ between a category's groups (adjusted p < 0.05)" />
+            <Tile label="Linked categories" value={String(realAssociations)} hint="Category pairs that go together (chi-square, adjusted p < 0.05)" />
+          </div>
+          <Charts charts={visuals.relationships ?? []} />
+          {result.correlations.length > 0 && (
+            <>
+              <h3>Correlations</h3>
+              <ul className="insight-list" aria-label="Correlations">
+                {result.correlations.map((c, i) => (
+                  <li key={i}>
+                    {c.column_a} ↔ {c.column_b}: <strong>{c.correlation}</strong>{" "}
+                    <span className="muted">
+                      (n = {c.n}, {formatP(c.p_value)})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <h3>Statistical tests</h3>
+          <StatisticsPanel tests={result.statistics} />
+        </section>
+      )}
+
+      {tab === "time-series" && (
+        <section {...panelProps("time-series")}>
+          <p className="takeaway">{timeSeriesTakeaway(result)}</p>
+          <div className="stats">
+            <Tile label="Series" value={String(result.time_series.length)} />
+            {result.time_axis && (
+              <Tile label="Time from" value={AXIS_KINDS[result.time_axis.kind] ?? result.time_axis.kind} hint={result.time_axis.label} />
+            )}
+            <Tile label="Seasonal" value={String(seasonal)} hint="Series where a repeating pattern explains 40% or more of the variation" />
+            <Tile label="Forecasts" value={String(result.time_series.filter((t) => t.forecast.length > 0).length)} />
+          </div>
+          <TimeSeriesPanel series={result.time_series} />
+        </section>
+      )}
+
+      {tab === "clustering" && (
+        <section {...panelProps("clustering")}>
+          <p className="takeaway">{clusteringTakeaway(result)}</p>
+          <ClusteringPanel clustering={result.clustering} charts={visuals.clustering ?? []} />
+        </section>
+      )}
+
+      {/* Stays mounted so training starts right away and keeps running on other tabs. */}
+      <section {...panelProps("models")} hidden={tab !== "models"}>
+        <MachineLearningPanel
+          sessionId={result.session_id}
+          columns={result.columns}
+          suggestions={result.model_targets}
+          autoTrain
+          visible={tab === "models"}
+        />
+      </section>
+
+      {tab === "build" && (
+        <section {...panelProps("build")}>
+          <p className="takeaway">Pick a chart type and columns; every figure is computed from your data as recorded.</p>
+          <ChartBuilder sessionId={result.session_id} columns={result.columns} />
+        </section>
+      )}
+
+      {tab === "ask" && (
+        <section {...panelProps("ask")}>
+          <p className="takeaway">
+            Answers come from the computed results only.{" "}
+            <Hint text="Free-form answers need an LLM API key on the server; without one you get the key findings. Follow-ups can refer to earlier answers." />
+          </p>
+          {thread.length > 0 && (
+            <ol className="qa-thread" aria-label="Questions and answers">
+              {thread.map((turn, i) => (
                 <li key={i}>
-                  <span className={`badge ${issue.severity}`}>{issue.severity}</span>{" "}
-                  {issue.message}
+                  <div className="qa-question">{turn.question}</div>
+                  <div className="qa-answer">
+                    {turn.answer}
+                    <div className="qa-meta">
+                      <span className="qa-source">
+                        {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
+                      </span>
+                      <CopyButton text={turn.answer} />
+                    </div>
+                  </div>
                 </li>
               ))}
-            </ul>
+            </ol>
           )}
-        </div>
-
-        <div className="panel">
-          <h2>Cleaning actions</h2>
-          {result.cleaning_actions.length === 0 ? (
-            <p className="empty-good">
-              <span aria-hidden="true">✓</span> No cleaning was needed.
-            </p>
-          ) : (
-            <ul className="insight-list">
-              {result.cleaning_actions.map((a, i) => (
-                <li key={i}>{a.description}</li>
+          {suggestions.length > 0 && (
+            <div className="suggestions" aria-label="Suggested questions">
+              {suggestions.map((q) => (
+                <button key={q} type="button" className="chip" disabled={asking} onClick={() => handleAsk(q)}>
+                  {q}
+                </button>
               ))}
-            </ul>
+            </div>
           )}
-        </div>
-      </div>
+          <div className="qa-box">
+            <textarea
+              aria-label="Your question"
+              maxLength={2000}
+              placeholder={
+                thread.length > 0
+                  ? "Ask a follow-up…"
+                  : "e.g. Which region had the highest sales? What trends do you see?"
+              }
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  void handleAsk();
+                }
+              }}
+            />
+            <div className="qa-actions">
+              <span className="muted small">Enter to send · Shift+Enter for a new line</span>
+              <button
+                type="button"
+                className="btn"
+                disabled={asking || !question.trim()}
+                onClick={() => handleAsk()}
+              >
+                {asking ? "Thinking…" : "Ask"}
+              </button>
+            </div>
+            {askError && <p className="error-msg">{askError}</p>}
+          </div>
+        </section>
+      )}
 
-      <div id="insights" className="panel">
-        <h2>Key insights</h2>
-        <ul className="insight-list">
-          {result.rule_insights.map((insight, i) => (
-            <li key={i}>
-              <strong>{insight.title}:</strong> {insight.message}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {result.numeric_summaries.length > 0 && (
-        <div id="statistics" className="panel">
-          <h2>Numeric statistics</h2>
+      {tab === "data" && (
+        <section {...panelProps("data")}>
+          <div className="tabs">
+            <button
+              type="button"
+              className={`tab ${previewTab === "raw" ? "active" : ""}`}
+              onClick={() => setPreviewTab("raw")}
+            >
+              Raw preview
+            </button>
+            <button
+              type="button"
+              className={`tab ${previewTab === "cleaned" ? "active" : ""}`}
+              onClick={() => setPreviewTab("cleaned")}
+            >
+              Cleaned preview
+            </button>
+          </div>
+          <DataTable title="" rows={previewTab === "raw" ? result.preview_rows : result.cleaned_preview_rows} />
+          <h3>Column profiles</h3>
           <div className="scroll-table">
-            <table className="data">
+            <table className="data" aria-label="Column profiles">
               <thead>
                 <tr>
                   <th>Column</th>
-                  <th className="num">Mean</th>
-                  <th className="num">Median</th>
-                  <th className="num">Std dev</th>
-                  <th className="num">Min</th>
-                  <th className="num">Max</th>
+                  <th>Type</th>
+                  <th>Missing %</th>
+                  <th>Unique</th>
+                  <th>Samples</th>
                 </tr>
               </thead>
               <tbody>
-                {result.numeric_summaries.map((s) => (
-                  <tr key={s.column}>
-                    <td>{s.column}</td>
-                    <td className="num">{formatNumber(s.mean)}</td>
-                    <td className="num">{formatNumber(s.median)}</td>
-                    <td className="num">{formatNumber(s.std)}</td>
-                    <td className="num">{formatNumber(s.min)}</td>
-                    <td className="num">{formatNumber(s.max)}</td>
+                {result.columns.map((col) => (
+                  <tr key={col.name}>
+                    <td>{col.name}</td>
+                    <td title={col.dtype}>
+                      {friendlyType(col.dtype)}
+                      {col.is_identifier && <span className="badge info">identifier</span>}
+                    </td>
+                    <td>{col.null_pct}%</td>
+                    <td>{col.unique_count}</td>
+                    <td>{col.sample_values.slice(0, 3).join(", ")}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       )}
-
-      {result.correlations.length > 0 && (
-        <div className="panel">
-          <h2>Correlations</h2>
-          <ul className="insight-list">
-            {result.correlations.map((c, i) => (
-              <li key={i}>
-                {c.column_a} ↔ {c.column_b}: <strong>{c.correlation}</strong>{" "}
-                <span className="muted">
-                  (n = {c.n}, {formatP(c.p_value)})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {result.trends.length > 0 && (
-        <div className="panel">
-          <h2>Trends</h2>
-          <ul className="insight-list">
-            {result.trends.map((t, i) => (
-              <li key={i}>{t.message}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div id="tests" className="panel">
-        <h2>Statistical tests</h2>
-        <StatisticsPanel tests={result.statistics} />
-      </div>
-
-      {result.time_series.length > 0 && (
-        <div id="time-series" className="panel">
-          <h2>Time series</h2>
-          <TimeSeriesPanel series={result.time_series} />
-        </div>
-      )}
-
-      <div id="machine-learning" className="panel">
-        <h2>Machine learning</h2>
-        <MachineLearningPanel
-          sessionId={result.session_id}
-          columns={result.columns}
-          clustering={result.clustering}
-          suggestions={result.model_targets}
-          autoTrain
-        />
-      </div>
-
-      <div id="charts" className="panel">
-        <h2>Visualizations</h2>
-        <Suspense fallback={<p className="muted">Loading charts…</p>}>
-          <ChartGrid charts={result.charts} explanation={result.explanation} />
-        </Suspense>
-      </div>
-
-      <div id="chart-builder" className="panel">
-        <h2>Build your own chart</h2>
-        <p className="panel-lead">
-          Pick a chart type and columns. The server computes every figure from your data as
-          recorded, without the filled-in gaps.
-        </p>
-        <ChartBuilder sessionId={result.session_id} columns={result.columns} />
-      </div>
-
-      <div id="ask" className="panel">
-        <h2>Ask a question</h2>
-        <p className="panel-lead">
-          Answers come from the computed results only. Free-form answers need an LLM API key on
-          the server; without one you get the key findings. Follow-ups can refer to earlier answers.
-        </p>
-        {thread.length > 0 && (
-          <ol className="qa-thread" aria-label="Questions and answers">
-            {thread.map((turn, i) => (
-              <li key={i}>
-                <div className="qa-question">{turn.question}</div>
-                <div className="qa-answer">
-                  {turn.answer}
-                  <div className="qa-meta">
-                    <span className="qa-source">
-                      {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
-                    </span>
-                    <CopyButton text={turn.answer} />
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-        {suggestions.length > 0 && (
-          <div className="suggestions" aria-label="Suggested questions">
-            {suggestions.map((q) => (
-              <button key={q} type="button" className="chip" disabled={asking} onClick={() => handleAsk(q)}>
-                {q}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="qa-box">
-          <textarea
-            aria-label="Your question"
-            maxLength={2000}
-            placeholder={
-              thread.length > 0
-                ? "Ask a follow-up…"
-                : "e.g. Which region had the highest sales? What trends do you see?"
-            }
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                void handleAsk();
-              }
-            }}
-          />
-          <div className="qa-actions">
-            <span className="muted small">Enter to send · Shift+Enter for a new line</span>
-            <button
-              type="button"
-              className="btn"
-              disabled={asking || !question.trim()}
-              onClick={() => handleAsk()}
-            >
-              {asking ? "Thinking…" : "Ask"}
-            </button>
-          </div>
-          {askError && <p className="error-msg">{askError}</p>}
-        </div>
-      </div>
-
-      <details id="data" className="panel collapsible">
-        <summary>
-          <h2>Data preview</h2>
-        </summary>
-        <div className="tabs">
-          <button
-            type="button"
-            className={`tab ${previewTab === "raw" ? "active" : ""}`}
-            onClick={() => setPreviewTab("raw")}
-          >
-            Raw preview
-          </button>
-          <button
-            type="button"
-            className={`tab ${previewTab === "cleaned" ? "active" : ""}`}
-            onClick={() => setPreviewTab("cleaned")}
-          >
-            Cleaned preview
-          </button>
-        </div>
-        <DataTable
-          title=""
-          rows={previewTab === "raw" ? result.preview_rows : result.cleaned_preview_rows}
-        />
-      </details>
-
-      <details id="columns" className="panel collapsible">
-        <summary>
-          <h2>Column profiles</h2>
-        </summary>
-        <div className="scroll-table">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Column</th>
-                <th>Type</th>
-                <th>Missing %</th>
-                <th>Unique</th>
-                <th>Samples</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.columns.map((col) => (
-                <tr key={col.name}>
-                  <td>{col.name}</td>
-                  <td title={col.dtype}>
-                    {friendlyType(col.dtype)}
-                    {col.is_identifier && <span className="badge info">identifier</span>}
-                  </td>
-                  <td>{col.null_pct}%</td>
-                  <td>{col.unique_count}</td>
-                  <td>{col.sample_values.slice(0, 3).join(", ")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </details>
     </>
   );
 }
