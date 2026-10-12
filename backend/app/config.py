@@ -64,8 +64,11 @@ class Settings(BaseSettings):
     # chat completions endpoint works; empty key means rule-based text.
     llm_api_key: str = ""
     llm_base_url: str = "https://api.groq.com/openai/v1"
-    # Llama 4 Scout was retired on Groq on 2026-07-17; Llama 3.3 70B is still in production there.
-    llm_model: str = "llama-3.3-70b-versatile"
+    # Groq retired Llama 3.3 70B on 2026-08-16 (requests then get 404) and recommends GPT-OSS 120B.
+    llm_model: str = "openai/gpt-oss-120b"
+    # Tried in order when the provider answers 404 for a retired model, so a shutdown
+    # degrades to a smaller model rather than to rule-based text.
+    llm_fallback_models: list[str] = ["openai/gpt-oss-20b"]
 
     @property
     def max_upload_bytes(self) -> int:

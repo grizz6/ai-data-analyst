@@ -176,7 +176,8 @@ Settings come from environment variables with the `ADA_` prefix, or from `backen
 | `ADA_API_DOCS` | `true` | Serve the interactive API docs at `/docs` and `/redoc`. `render.yaml` turns them off |
 | `ADA_LLM_API_KEY` | empty | Key for the explanation model. Empty means rule-based summaries |
 | `ADA_LLM_BASE_URL` | `https://api.groq.com/openai/v1` | Any OpenAI-compatible chat completions endpoint |
-| `ADA_LLM_MODEL` | `llama-3.3-70b-versatile` | Model name at that endpoint. (Llama 4 Scout was retired on Groq on 2026-07-17.) |
+| `ADA_LLM_MODEL` | `openai/gpt-oss-120b` | Model name at that endpoint. Groq retired Llama 3.3 70B on 2026-08-16 |
+| `ADA_LLM_FALLBACK_MODELS` | `["openai/gpt-oss-20b"]` | Tried in order when the provider answers 404 for a retired model (a JSON list) |
 
 ### Turning on the language model
 

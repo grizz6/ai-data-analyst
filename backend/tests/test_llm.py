@@ -187,6 +187,40 @@ def test_auth_error_is_not_retried(result, configured):
     assert "HTTP 401" in summary.fallback_reason
 
 
+def test_retired_model_falls_through_to_the_next_one():
+    replies = [httpx.Response(404, json={"error": {"code": "model_not_found"}}), completion({"answer": "ok"})]
+    seen: list[dict] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return replies[len(seen) - 1]
+
+    client = LLMClient(
+        api_key="k",
+        base_url="https://llm.test/v1",
+        model="old-model",
+        fallback_models=["openai/gpt-oss-20b"],
+        transport=httpx.MockTransport(handle),
+    )
+    reply = asyncio.run(client.chat_json("system", "user"))
+    assert reply.data == {"answer": "ok"}
+    assert [r["model"] for r in seen] == ["old-model", "openai/gpt-oss-20b"]
+    # Reasoning models are asked to keep their reasoning short; others aren't sent the option.
+    assert "reasoning_effort" not in seen[0] and seen[1]["reasoning_effort"] == "low"
+
+
+def test_every_model_retired_falls_back_to_rules(result, configured):
+    fake = FakeModel(httpx.Response(404))
+    summary = explain(result, fake)
+    assert len(fake.requests) == 1  # FakeModel's client has no fallbacks; a 404 isn't retried
+    assert summary.source == "rule_based" and "model not available (test-model)" in summary.fallback_reason
+
+
+def test_default_model_is_one_groq_still_serves():
+    assert settings.llm_model == "openai/gpt-oss-120b"
+    assert settings.llm_fallback_models == ["openai/gpt-oss-20b"]
+
+
 def ask(result, fake: FakeModel, question: str):
     return asyncio.run(explanation.answer_question(result, question, client=fake.client()))
 

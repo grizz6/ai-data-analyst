@@ -14,11 +14,19 @@ from dataclasses import dataclass
 import httpx
 
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504}
+# Providers answer 404 for a model they've retired; the next model in the list is tried instead.
+MODEL_GONE_STATUS = 404
 MAX_RETRY_AFTER_SECONDS = 10.0
+# OpenAI's open-weight models reason before answering; "low" keeps that quick for short JSON replies.
+REASONING_MODEL_PREFIX = "openai/gpt-oss"
 
 
 class LLMError(Exception):
     """The model call failed or returned something unusable. Callers fall back."""
+
+
+class _ModelGone(Exception):
+    """The provider doesn't have this model (any more)."""
 
 
 @dataclass
@@ -38,6 +46,7 @@ class LLMClient:
         api_key: str,
         base_url: str,
         model: str,
+        fallback_models: list[str] | None = None,
         timeout_seconds: float = 30.0,
         max_retries: int = 2,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -46,6 +55,7 @@ class LLMClient:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
+        self.models = [model, *[m for m in (fallback_models or []) if m and m != model]]
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self._transport = transport
@@ -55,11 +65,21 @@ class LLMClient:
         """Send one chat request and return the reply parsed as a JSON object.
 
         Retries timeouts, connection errors, 429 and 5xx with exponential
-        backoff (honoring Retry-After up to 10 s). Any other 4xx fails at once,
-        since sending the same request again won't change the answer.
+        backoff (honoring Retry-After up to 10 s). A 404 means the provider
+        retired the model, so the next fallback model is tried. Any other 4xx
+        fails at once, since sending the same request again won't change the answer.
         """
-        payload = {
-            "model": self.model,
+        gone: list[str] = []
+        for model in self.models:
+            try:
+                return await self._chat_one(model, system, user, temperature)
+            except _ModelGone:
+                gone.append(model)
+        raise LLMError(f"HTTP 404: model not available ({', '.join(gone)})")
+
+    async def _chat_one(self, model: str, system: str, user: str, temperature: float) -> ChatResult:
+        payload: dict = {
+            "model": model,
             "temperature": temperature,
             "response_format": {"type": "json_object"},
             "messages": [
@@ -67,6 +87,8 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         }
+        if model.startswith(REASONING_MODEL_PREFIX):
+            payload["reasoning_effort"] = "low"
         headers = {"Authorization": f"Bearer {self.api_key}"}
         started = time.perf_counter()
         last_error = "no attempt made"
@@ -85,7 +107,9 @@ class LLMClient:
                     delay = self._backoff(attempt)
                 else:
                     if response.status_code == 200:
-                        return self._parse(response, attempt, started)
+                        return self._parse(response, model, attempt, started)
+                    if response.status_code == MODEL_GONE_STATUS:
+                        raise _ModelGone(model)
                     last_error = f"HTTP {response.status_code}"
                     if response.status_code not in RETRYABLE_STATUS:
                         raise LLMError(last_error)
@@ -96,7 +120,7 @@ class LLMClient:
 
         raise LLMError(f"{last_error} ({self.max_retries + 1} attempts)")
 
-    def _parse(self, response: httpx.Response, attempts: int, started: float) -> ChatResult:
+    def _parse(self, response: httpx.Response, model: str, attempts: int, started: float) -> ChatResult:
         try:
             body = response.json()
             content = body["choices"][0]["message"]["content"]
@@ -109,7 +133,7 @@ class LLMClient:
         usage = body.get("usage") or {}
         return ChatResult(
             data=data,
-            model=body.get("model") or self.model,
+            model=body.get("model") or model,
             latency_ms=round((time.perf_counter() - started) * 1000),
             attempts=attempts,
             prompt_tokens=usage.get("prompt_tokens"),
