@@ -1,0 +1,59 @@
+name: Site check
+
+# Run by hand (Actions -> Site check -> Run workflow) to check the live site end to end:
+# the page loads, an upload is analyzed by the current version, a goal gets a plan
+# (and whether the language model wrote it), and the test analysis is deleted again.
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SITE_URL: ${{ vars.SITE_URL || 'https://ai-data-analyst-xz78.onrender.com' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: sample-data
+
+      - name: Health
+        run: |
+          start=$(date +%s)
+          curl --fail --silent --show-error --max-time 90 --retry 3 --retry-delay 10 --retry-all-errors \
+            "$SITE_URL/api/health" | tee health.json
+          echo
+          echo "Answered in $(( $(date +%s) - start )) s (about a minute means it was asleep)."
+
+      - name: Page
+        run: |
+          curl --fail --silent --show-error --max-time 60 "$SITE_URL/" -o page.html
+          grep -o '<title>[^<]*</title>' page.html
+
+      - name: Upload the sample file
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            -F "file=@sample-data/sales_sample.csv" "$SITE_URL/api/upload" -o result.json
+          jq '{rows: .row_count, columns: .column_count, tabs_with_charts: (.visuals | keys),
+               variables: [.variables[] | "\(.name): \(.kind)"], suggestions: [.recommendations[].title][:5],
+               summary_by: .explanation.source, model: .explanation.model, fallback: .explanation.fallback_reason}' result.json
+          jq -e '(.variables | length) > 0 and (.recommendations | length) > 0' result.json > /dev/null \
+            || { echo "::error::The site is running an older version (no variables or suggestions)."; exit 1; }
+
+      - name: Plan for a goal
+        run: |
+          id=$(jq -r .session_id result.json)
+          curl --fail-with-body --silent --show-error --max-time 120 -H "Content-Type: application/json" \
+            -d '{"goal": "Grow sales in the weakest region"}' "$SITE_URL/api/sessions/$id/plan" \
+            | jq '{source, model, fallback_reason, note, steps: [.steps[] | "\(.title): \(.why)"]}'
+
+      - name: Delete the test analysis
+        if: always()
+        run: |
+          id=$(jq -r '.session_id // empty' result.json 2>/dev/null || true)
+          if [ -n "$id" ]; then
+            curl --silent --show-error --max-time 30 -X DELETE -o /dev/null -w "Deleted: HTTP %{http_code}\n" \
+              "$SITE_URL/api/sessions/$id"
+          fi
