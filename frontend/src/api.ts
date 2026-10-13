@@ -4,15 +4,18 @@ import type { AnalysisResult, PlanResponse } from "./types";
 async function errorMessage(res: Response, fallback: string): Promise<string> {
   const body = await res.json().catch(() => null);
   // Our own errors carry a sentence; validation errors (422) carry a list meant for developers.
-  return typeof body?.detail === "string" ? body.detail : fallback;
+  if (typeof body?.detail === "string") return body.detail;
+  // 502-504 come from the host in front of the app: it was restarting or busy.
+  if (res.status >= 502 && res.status <= 504) return "The server is waking up or busy. Try again in a minute.";
+  return fallback;
 }
 
-export async function uploadDataset(file: File, sheet?: string): Promise<AnalysisResult> {
+export async function uploadDataset(file: File, sheet?: string, signal?: AbortSignal): Promise<AnalysisResult> {
   const form = new FormData();
   form.append("file", file);
 
   const query = sheet ? `?sheet=${encodeURIComponent(sheet)}` : "";
-  const res = await fetch(`/api/upload${query}`, { method: "POST", body: form });
+  const res = await fetch(`/api/upload${query}`, { method: "POST", body: form, signal });
   if (!res.ok) {
     throw new Error(await errorMessage(res, "Upload failed"));
   }

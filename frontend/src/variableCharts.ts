@@ -118,8 +118,9 @@ export function violinChart(v: VariableProfile): ChartSpec | null {
     mode: "lines",
     x: [-0.25, 0.25],
     y: [v.box.median, v.box.median],
-    line: { color: "#e8eef5", width: 2 },
-    meta: "fixed-color",
+    line: { width: 2 },
+    // Drawn in the text color, so it shows on light and dark backgrounds.
+    meta: "foreground",
     name: "median",
     hovertemplate: `median ${v.box.median}<extra></extra>`,
   };

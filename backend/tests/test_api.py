@@ -21,7 +21,9 @@ def test_upload_runs_the_full_pipeline(client, sample_csv_bytes):
     body = res.json()
     assert body["row_count"] == 31
     assert body["column_count"] == 5
-    assert body["charts"]
+    # Report-only charts stay on the server; the dashboard draws from `visuals`.
+    assert "charts" not in body
+    assert body["visuals"]
     assert body["rule_insights"]
     assert {c["column_a"] for c in body["correlations"]} == {"sales"}
 

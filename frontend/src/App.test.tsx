@@ -5,7 +5,6 @@ import App from "./App";
 import { loadRecent, rememberAnalysis } from "./recent";
 import { jsonResponse, sampleResult } from "./test/fixtures";
 
-// The Models panel trains on load and is tested on its own.
 vi.mock("./components/ChartGrid", () => ({ default: () => <div /> }));
 
 const entry = (sessionId: string) => ({ sessionId, filename: "old.csv", rows: 12, columns: 3, openedAt: Date.now() });
@@ -56,6 +55,66 @@ describe("App", () => {
   it("keeps the five most recent, newest first, without duplicates", () => {
     for (const id of ["a", "b", "c", "d", "e", "f", "c"]) rememberAnalysis(entry(id));
     expect(loadRecent().map((r) => r.sessionId)).toEqual(["c", "f", "e", "d", "b"]);
+  });
+});
+
+describe("uploads", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("can be cancelled, and the same file picked again", async () => {
+    const result = sampleResult();
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/health") return Promise.resolve(jsonResponse({ max_upload_mb: 10 }));
+        calls += 1;
+        // The first upload hangs until it is cancelled; the second answers.
+        if (calls === 1) {
+          return new Promise<Response>((_, reject) =>
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))),
+          );
+        }
+        return Promise.resolve(jsonResponse(result));
+      }),
+    );
+    render(<App />);
+    const file = new File(["a\n1\n"], "sales_sample.csv");
+
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), file);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), file);
+    expect(await screen.findByRole("heading", { level: 1, name: "sales_sample.csv" })).toBeInTheDocument();
+  });
+
+  it("says so when the connection drops", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) =>
+        url === "/api/health" ? Promise.resolve(jsonResponse({ max_upload_mb: 10 })) : Promise.reject(new TypeError("Failed to fetch")),
+      ),
+    );
+    render(<App />);
+    await userEvent.upload(screen.getByLabelText("CSV or Excel file"), new File(["a\n1\n"], "x.csv"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Lost the connection to the server");
+  });
+});
+
+describe("theme", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("switches between light and dark and remembers the pick", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ max_upload_mb: 10 })));
+    document.documentElement.dataset.theme = "light";
+    render(<App />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Switch to dark mode" }));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(localStorage.getItem("ada-theme")).toBe("dark");
+    expect(screen.getByRole("button", { name: "Switch to light mode" })).toBeInTheDocument();
   });
 });
 

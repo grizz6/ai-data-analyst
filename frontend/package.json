@@ -11,6 +11,7 @@
     "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.5",
     "plotly.js-cartesian-dist-min": "2.35.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

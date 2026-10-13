@@ -68,6 +68,9 @@ describe("error messages", () => {
     await expect(planForGoal("s", "g")).rejects.toThrow("Couldn't make a plan");
 
     stubFetch(new Response("<html>Bad gateway</html>", { status: 502 }));
+    await expect(uploadDataset(file)).rejects.toThrow("The server is waking up or busy");
+
+    stubFetch(new Response("<html>oops</html>", { status: 500 }));
     await expect(uploadDataset(file)).rejects.toThrow("Upload failed");
   });
 });

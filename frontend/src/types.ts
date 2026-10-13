@@ -9,7 +9,8 @@ import type { components } from "./generated/api-schema";
 
 type Schemas = components["schemas"];
 
-export type AnalysisResult = Schemas["AnalysisResult"];
+// The server keeps the report-only `charts` to itself; the dashboard draws from `visuals`.
+export type AnalysisResult = Omit<Schemas["AnalysisResult"], "charts">;
 export type CategoricalSummary = Schemas["CategoricalSummary"];
 export type ChartSpec = Schemas["ChartSpec"];
 export type CleaningAction = Schemas["CleaningAction"];

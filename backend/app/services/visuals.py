@@ -163,7 +163,7 @@ def _missing_map(raw: pd.DataFrame) -> ChartSpec | None:
     fig = px.imshow(
         sample.T.astype(int).to_numpy(),
         y=[str(c) for c in sample.columns],
-        color_continuous_scale=[[0, "#1a2533"], [1, "#f87171"]],
+        color_continuous_scale=[[0, "rgba(148, 163, 184, 0.16)"], [1, "#f87171"]],
         aspect="auto",
         labels={"x": "row (sample)", "color": "missing"},
     )

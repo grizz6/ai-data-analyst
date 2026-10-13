@@ -85,10 +85,17 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     return (tabs.find(([id]) => id === fromHash)?.[0] ?? "overview") as TabId;
   });
   const tabButtons = useRef<Record<string, HTMLButtonElement | null>>({});
+  const tabsAnchor = useRef<HTMLDivElement>(null);
 
   const choose = (id: TabId) => {
     setTab(id);
     window.history.replaceState(null, "", `#${id}`);
+    // A new tab starts at its top, not wherever the last one was scrolled to.
+    const anchor = tabsAnchor.current;
+    if (anchor) {
+      const top = anchor.getBoundingClientRect().top + window.scrollY - 64;
+      if (window.scrollY > top) window.scrollTo({ top, behavior: "smooth" });
+    }
   };
   const [variable, setVariable] = useState<string | null>(null);
   const handleAction = (action: RecommendationAction) => {
@@ -136,7 +143,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       <div className="file-card">
         <div className="file-main">
           <span className="file-icon" aria-hidden="true">
-            ▤
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="2.5" />
+              <path d="M3 9.5h18M3 15h18M9 4v16" />
+            </svg>
           </span>
           <div>
             <h1 className="file-name">{result.filename}</h1>
@@ -200,6 +210,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </p>
       )}
 
+      <div ref={tabsAnchor} aria-hidden="true" />
       <div className="dash-tabs" role="tablist" aria-label="Analysis sections">
         {tabs.map(([id, label]) => (
           <button

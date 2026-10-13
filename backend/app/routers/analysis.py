@@ -58,7 +58,12 @@ async def read_capped(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/upload", response_model=AnalysisResult)
+# The report's own charts carry every data point and the dashboard never draws them;
+# leaving them out keeps the response small enough to load without freezing the page.
+DASHBOARD_EXCLUDE = {"charts"}
+
+
+@router.post("/upload", response_model=AnalysisResult, response_model_exclude=DASHBOARD_EXCLUDE)
 async def upload_dataset(
     file: Annotated[UploadFile, File()],
     sheet: Annotated[str | None, Query(description="Excel only: which sheet to analyze.")] = None,
@@ -107,7 +112,7 @@ async def upload_dataset(
     return result
 
 
-@router.get("/sessions/{session_id}", response_model=AnalysisResult)
+@router.get("/sessions/{session_id}", response_model=AnalysisResult, response_model_exclude=DASHBOARD_EXCLUDE)
 async def get_session(session_id: str):
     return session_or_404(session_id)
 

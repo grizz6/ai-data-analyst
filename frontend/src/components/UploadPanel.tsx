@@ -55,13 +55,25 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
         handleFile(e.dataTransfer.files[0]);
       }}
     >
-      <p>Drop a CSV or Excel file here, or choose a file to upload.</p>
+      <div className="upload-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 16V4" />
+          <path d="m7 9 5-5 5 5" />
+          <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+        </svg>
+      </div>
+      <p className="upload-title">Drop a CSV or Excel file here</p>
+      <p className="upload-sub">or choose one from your computer</p>
       <input
         ref={inputRef}
         type="file"
         aria-label="CSV or Excel file"
         accept=".csv,.xlsx,.xls"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          // Cleared so picking the same file again, after an error or a cancel, still starts an upload.
+          e.target.value = "";
+        }}
       />
       <button
         type="button"
@@ -71,7 +83,7 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
       >
         {loading ? "Analyzing…" : "Choose file"}
       </button>
-      <p style={{ marginTop: "0.75rem" }}>
+      <p className="upload-sample">
         <button
           type="button"
           className="link-btn"
@@ -89,7 +101,7 @@ export default function UploadPanel({ onUpload, onReject, loading }: Props) {
           No file handy? Try the sample sales data
         </button>
       </p>
-      <p style={{ marginTop: "1rem", fontSize: "0.85rem", color: "var(--muted)" }}>
+      <p className="upload-limits">
         CSV up to {maxUploadMb} MB, Excel up to {maxExcelMb} MB · Very large files are analyzed on a
         random sample of rows
       </p>

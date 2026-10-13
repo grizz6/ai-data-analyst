@@ -1,10 +1,48 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getSession, uploadDataset } from "./api";
 import AnalysisDashboard from "./components/AnalysisDashboard";
 import RecentAnalyses from "./components/RecentAnalyses";
 import UploadPanel from "./components/UploadPanel";
 import { forgetAll, forgetAnalysis, loadRecent, rememberAnalysis, type RecentAnalysis } from "./recent";
+import { setTheme, useTheme } from "./theme";
 import type { AnalysisResult } from "./types";
+
+// Past this, the server is stuck or gone; better to say so than spin forever.
+const UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
+function ThemeToggle() {
+  const theme = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      type="button"
+      className="icon-btn"
+      aria-label={`Switch to ${next} mode`}
+      title={`Switch to ${next} mode`}
+      onClick={() => setTheme(next)}
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        {theme === "dark" ? (
+          <>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          </>
+        ) : (
+          <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" />
+        )}
+      </svg>
+    </button>
+  );
+}
+
+function Elapsed() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="elapsed">{seconds} s</span>;
+}
 
 export default function App() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -14,6 +52,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentAnalysis[]>(loadRecent);
   const [notice, setNotice] = useState<string | null>(null);
+  const upload = useRef<AbortController | null>(null);
 
   const show = (data: AnalysisResult) => {
     setResult(data);
@@ -30,18 +69,41 @@ export default function App() {
   };
 
   const analyze = async (target: File, sheet?: string) => {
+    upload.current?.abort();
+    const controller = new AbortController();
+    upload.current = controller;
+    const timer = setTimeout(() => controller.abort("timeout"), UPLOAD_TIMEOUT_MS);
     setLoading(true);
     setError(null);
     setNotice(null);
     try {
-      const data = await uploadDataset(target, sheet);
+      const data = await uploadDataset(target, sheet, controller.signal);
       setFile(target);
       show(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      if (controller.signal.aborted) {
+        if (controller.signal.reason === "timeout") {
+          setError("The analysis took too long and was stopped. Try again, or try a smaller file.");
+        }
+      } else if (e instanceof TypeError) {
+        // fetch throws TypeError when the connection drops before an answer.
+        setError("Lost the connection to the server. Check your internet and try again.");
+      } else {
+        setError(e instanceof Error ? e.message : "Upload failed");
+      }
     } finally {
-      setLoading(false);
+      clearTimeout(timer);
+      if (upload.current === controller) {
+        upload.current = null;
+        setLoading(false);
+      }
     }
+  };
+
+  const cancel = () => {
+    upload.current?.abort();
+    upload.current = null;
+    setLoading(false);
   };
 
   const reopen = async (sessionId: string) => {
@@ -78,15 +140,22 @@ export default function App() {
         <div className="topbar-inner">
           <span className="brand">
             <span className="brand-mark" aria-hidden="true">
-              ▦
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <rect x="3" y="12" width="4" height="9" rx="1.5" />
+                <rect x="10" y="7" width="4" height="14" rx="1.5" />
+                <rect x="17" y="3" width="4" height="18" rx="1.5" />
+              </svg>
             </span>
             AI Data Analyst
           </span>
-          {result && (
-            <button type="button" className="btn secondary" onClick={startOver}>
-              New analysis
-            </button>
-          )}
+          <div className="topbar-actions">
+            {result && (
+              <button type="button" className="btn secondary" onClick={startOver}>
+                New analysis
+              </button>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
       </div>
 
@@ -94,11 +163,13 @@ export default function App() {
         {!result && (
           <>
             <header className="hero">
-              <h1>Understand a spreadsheet in seconds</h1>
+              <span className="eyebrow">Exploratory data analysis</span>
+              <h1>
+                Understand any spreadsheet <span className="gradient-text">in seconds</span>
+              </h1>
               <p>
-                Upload a CSV or Excel file to get quality checks, cleaning, statistics, charts and
-                plain-English insights. Every number is computed with Pandas; an optional language
-                model only explains the results.
+                Upload a CSV or Excel file. Get its quality, every column profiled, how the columns relate,
+                and an honest read on what the data can and can't support.
               </p>
             </header>
             <div className="panel">
@@ -116,8 +187,18 @@ export default function App() {
               {loading && (
                 <div className="loading" role="status">
                   <span className="spinner" aria-hidden="true" />
-                  <p>Analyzing your file: checking quality, cleaning, computing statistics and drawing charts…</p>
-                  <p className="muted">Large files can take up to a minute.</p>
+                  <div>
+                    <p className="loading-title">
+                      Analyzing your file <Elapsed />
+                    </p>
+                    <p className="muted">
+                      Checking quality, profiling every column and testing relationships. Large files, or a
+                      server that was asleep, can take up to a minute.
+                    </p>
+                  </div>
+                  <button type="button" className="btn secondary small-btn" onClick={cancel}>
+                    Cancel
+                  </button>
                 </div>
               )}
             </div>
