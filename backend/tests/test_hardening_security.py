@@ -498,6 +498,9 @@ def test_no_secrets_in_tracked_files():
     for path in _tracked_files():
         if path.suffix in {".png", ".jpg", ".ico", ".woff2", ".xlsx"} or not path.is_file():
             continue
+        # The leak tests themselves name the patterns they look for.
+        if path.name.startswith("test_hardening") or path.name == "hardening.test.tsx":
+            continue
         text = path.read_text(errors="ignore")
         for pattern in SECRET_PATTERNS:
             if pattern in text and path.name != Path(__file__).name:

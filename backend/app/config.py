@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "AI Data Analyst Agent"
-    max_upload_mb: int = 75
+    # Bytes on the wire. The browser gzips CSVs before sending, so this is
+    # usually the compressed size; it stays under the 100 MB request cap common
+    # at hosting edges.
+    max_upload_mb: int = 90
+    # A CSV's size once decompressed. Large files are read in chunks and sampled
+    # (see max_analysis_rows), so memory stays flat; this bounds the reading time.
+    max_csv_mb: int = 200
     # Excel has to be opened whole (it's a zip archive), so it gets a lower cap.
     max_excel_mb: int = 15
     # Larger files are analyzed on a random sample of this many rows, which keeps
@@ -72,6 +78,10 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def max_csv_bytes(self) -> int:
+        return self.max_csv_mb * 1024 * 1024
 
     @property
     def max_excel_bytes(self) -> int:

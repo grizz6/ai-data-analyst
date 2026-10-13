@@ -8,7 +8,7 @@ import { setTheme, useTheme } from "./theme";
 import type { AnalysisResult } from "./types";
 
 // Past this, the server is stuck or gone; better to say so than spin forever.
-const UPLOAD_TIMEOUT_MS = 5 * 60_000;
+const UPLOAD_TIMEOUT_MS = 10 * 60_000;
 
 function ThemeToggle() {
   const theme = useTheme();
@@ -193,7 +193,7 @@ export default function App() {
                     </p>
                     <p className="muted">
                       Checking quality, profiling every column and testing relationships. Large files, or a
-                      server that was asleep, can take up to a minute.
+                      server that was asleep, can take a few minutes.
                     </p>
                   </div>
                   <button type="button" className="btn secondary small-btn" onClick={cancel}>

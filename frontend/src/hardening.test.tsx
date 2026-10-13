@@ -142,7 +142,11 @@ describe("uploads are checked before they are sent", () => {
 
   function setup() {
     const fetchMock = vi.fn((url: string) =>
-      Promise.resolve(url === "/api/health" ? jsonResponse({ max_upload_mb: 1, max_excel_mb: 1 }) : jsonResponse(sampleResult())),
+      Promise.resolve(
+        url === "/api/health"
+          ? jsonResponse({ max_upload_mb: 1, max_csv_mb: 1, max_excel_mb: 1 })
+          : jsonResponse(sampleResult()),
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);

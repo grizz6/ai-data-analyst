@@ -1,5 +1,9 @@
 import csv
+import gzip
+import io
 import zipfile
+import zlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
@@ -24,6 +28,9 @@ SAMPLE_SEED = 20240501
 
 # An upload arrives either as bytes or as the file the web framework spooled to disk.
 Source = bytes | BinaryIO
+
+# The browser gzips CSVs before uploading them; the first two bytes give it away.
+GZIP_MAGIC = b"\x1f\x8b"
 
 
 class DatasetError(ValueError):
@@ -52,14 +59,14 @@ def load_table(source: Source, filename: str, sheet: str | None = None) -> Loade
     suffix = Path(filename).suffix.lower()
 
     if suffix == ".csv":
-        df, total_rows = _read_csv(_as_stream(source))
+        df, total_rows = _read_csv(_csv_opener(source))
         table = LoadedTable(df=df, total_rows=total_rows)
     elif suffix in {".xlsx", ".xls"}:
         data = source if isinstance(source, bytes) else _as_stream(source).read()
         if len(data) > settings.max_excel_bytes:
             raise DatasetError(
                 f"Excel files can be up to {settings.max_excel_mb} MB, since a workbook has to be opened "
-                f"whole. Save the sheet as CSV (up to {settings.max_upload_mb} MB) and upload that instead."
+                f"whole. Save the sheet as CSV (up to {settings.max_csv_mb} MB) and upload that instead."
             )
         table = _read_excel(data, sheet)
         table.total_rows = len(table.df)
@@ -84,20 +91,58 @@ def _as_stream(source: Source) -> BinaryIO:
     return source
 
 
-def _read_csv(stream: BinaryIO) -> tuple[pd.DataFrame, int]:
+class _CappedReader(io.RawIOBase):
+    """Decompresses as it is read, and stops once the CSV passes ADA_MAX_CSV_MB.
+
+    The cap is what makes a gzip bomb (a few MB that inflate to many GB) harmless:
+    nothing past the limit is ever decompressed.
+    """
+
+    def __init__(self, raw: BinaryIO) -> None:
+        raw.seek(0)
+        self._inner = gzip.GzipFile(fileobj=raw, mode="rb")
+        self._read = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, buffer) -> int:
+        try:
+            n = self._inner.readinto(buffer)
+        except (OSError, EOFError, zlib.error) as exc:
+            raise DatasetError("The compressed file is damaged. Upload it again.") from exc
+        self._read += n
+        if self._read > settings.max_csv_bytes:
+            raise DatasetError(
+                f"This CSV is over {settings.max_csv_mb} MB once uncompressed. "
+                "Remove rows or columns you don't need, or split the file."
+            )
+        return n
+
+
+def _csv_opener(source: Source) -> Callable[[], BinaryIO]:
+    """Something that opens the CSV from its start, decompressing it if it was gzipped."""
+    stream = _as_stream(source)
+    compressed = stream.read(2) == GZIP_MAGIC
+    stream.seek(0)
+    if not compressed:
+        return lambda: _as_stream(stream)
+    return lambda: io.BufferedReader(_CappedReader(stream), buffer_size=1024 * 1024)
+
+
+def _read_csv(open_csv: Callable[[], BinaryIO]) -> tuple[pd.DataFrame, int]:
     """The rows to analyze (all of them, or a sample of large files) and the file's row count."""
-    head = stream.read(SNIFF_SAMPLE_BYTES)
+    head = open_csv().read(SNIFF_SAMPLE_BYTES)
     if not head.strip():
         raise DatasetError("The file is empty.")
 
     # A wrong guess at the encoding can surface anywhere in the file, so each
     # attempt reads it to the end. latin-1 accepts any byte, so the loop ends.
     for encoding in CSV_ENCODINGS:
-        stream.seek(0)
         try:
             # The sample can end mid-character; that only matters for sniffing.
             delimiter = _sniff_delimiter(head.decode(encoding, errors="ignore"))
-            return _sample_csv(stream, encoding, delimiter)
+            return _sample_csv(open_csv, encoding, delimiter)
         except UnicodeDecodeError:
             continue
     raise DatasetError("The file's text encoding couldn't be read.")
@@ -110,7 +155,7 @@ def _sniff_delimiter(text: str) -> str:
         return ","
 
 
-def _sample_csv(stream: BinaryIO, encoding: str, delimiter: str) -> tuple[pd.DataFrame, int]:
+def _sample_csv(open_csv: Callable[[], BinaryIO], encoding: str, delimiter: str) -> tuple[pd.DataFrame, int]:
     """Read in chunks, keeping a uniform random sample of at most ADA_MAX_ANALYSIS_ROWS rows.
 
     Every row gets a random key and the rows with the smallest keys are kept,
@@ -122,7 +167,7 @@ def _sample_csv(stream: BinaryIO, encoding: str, delimiter: str) -> tuple[pd.Dat
     keys: np.ndarray = np.empty(0)
     total = 0
     try:
-        for chunk in pd.read_csv(stream, sep=delimiter, encoding=encoding, chunksize=CSV_CHUNK_ROWS):
+        for chunk in pd.read_csv(open_csv(), sep=delimiter, encoding=encoding, chunksize=CSV_CHUNK_ROWS):
             total += len(chunk)
             kept = chunk if kept is None else pd.concat([kept, chunk])
             keys = np.concatenate([keys, rng.random(len(chunk))])
@@ -137,8 +182,7 @@ def _sample_csv(stream: BinaryIO, encoding: str, delimiter: str) -> tuple[pd.Dat
         ) from exc
 
     if kept is None:  # a header and no rows
-        stream.seek(0)
-        kept = pd.read_csv(stream, sep=delimiter, encoding=encoding, nrows=0)
+        kept = pd.read_csv(open_csv(), sep=delimiter, encoding=encoding, nrows=0)
     return kept.sort_index(), total
 
 

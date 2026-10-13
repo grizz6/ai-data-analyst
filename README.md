@@ -12,7 +12,7 @@ Business goals differ from one analysis to the next, but every one starts the sa
 
 ## What it does
 
-Upload a CSV or Excel file (up to 75 MB) and get the whole exploratory pass in seconds.
+Upload a CSV (up to 200 MB, compressed in the browser before it's sent) or an Excel file (up to 15 MB) and get the whole exploratory pass in seconds.
 
 - **The dataset's story.** A short plain-English summary of what the file holds, what it tells you, and what to check before using it.
 - **Data quality.** Missing values per column and where they fall, which columns go missing together, whether gaps depend on other columns (income missing mostly for younger rows, say), exact duplicate rows with their row numbers, and every cleaning step applied to the downloadable copy.

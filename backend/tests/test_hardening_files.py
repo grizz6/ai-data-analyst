@@ -215,3 +215,69 @@ def test_excel_with_formulas_and_dates(client):
 
 def test_old_xls_that_is_not_really_xls_is_refused(client):
     assert upload(client, GOOD, "old.xls").status_code == 400
+
+
+# ---------- Compressed CSV uploads (the browser gzips large CSVs) ----------
+
+import gzip  # noqa: E402
+
+
+def test_gzipped_csv_is_analyzed_under_its_original_name(client):
+    res = upload(client, gzip.compress(GOOD), "sales.csv.gz")
+    assert res.status_code == 200
+    assert res.json()["filename"] == "sales.csv"
+    assert res.json()["row_count"] == 40
+
+
+def test_gzipped_csv_gives_the_same_result_as_plain(client):
+    plain = upload(client, GOOD, "a.csv").json()
+    packed = upload(client, gzip.compress(GOOD), "a.csv.gz").json()
+    for key in ("row_count", "column_count", "numeric_summaries", "correlations"):
+        assert plain[key] == packed[key], key
+
+
+def test_gzipped_latin1_csv_still_finds_its_encoding(client):
+    body = b"name,amount\n" + "".join(f"Jos\xe9 {i},{i}\n" for i in range(20)).encode("latin-1")
+    res = upload(client, gzip.compress(body), "names.csv.gz")
+    assert res.status_code == 200
+    assert any("José" in str(v) for row in res.json()["preview_rows"] for v in row.values())
+
+
+def test_gzip_bomb_is_stopped_at_the_csv_limit(client, monkeypatch):
+    monkeypatch.setattr(settings, "max_csv_mb", 1)
+    bomb = gzip.compress(b"a,b\n" + b"1,2\n" * (2 * 1024 * 1024))
+    assert len(bomb) < 100_000
+    res = upload(client, bomb, "bomb.csv.gz")
+    assert res.status_code == 400
+    assert "1 MB once uncompressed" in res.json()["detail"]
+
+
+@pytest.mark.parametrize("cut", [10, 100, -20])
+def test_damaged_gzip_is_refused(client, cut):
+    body = gzip.compress(GOOD * 50)
+    res = upload(client, body[:cut], "d.csv.gz")
+    assert res.status_code == 400
+
+
+def test_gzipped_header_only_is_handled(client):
+    assert upload(client, gzip.compress(b"a,b,c\n"), "h.csv.gz").status_code in (200, 400)
+
+
+def test_gzipped_empty_file_is_refused(client):
+    res = upload(client, gzip.compress(b""), "e.csv.gz")
+    assert res.status_code == 400
+
+
+def test_gzip_with_a_plain_csv_name_is_still_read(client):
+    assert upload(client, gzip.compress(GOOD), "plain-name.csv").status_code == 200
+
+
+def test_other_gz_files_are_refused(client):
+    assert upload(client, gzip.compress(GOOD), "data.json.gz").status_code == 400
+    assert upload(client, gzip.compress(GOOD), "data.gz").status_code == 400
+
+
+def test_health_reports_the_csv_limit(client):
+    body = client.get("/api/health").json()
+    assert body["max_csv_mb"] == settings.max_csv_mb
+    assert body["max_csv_mb"] >= body["max_upload_mb"]

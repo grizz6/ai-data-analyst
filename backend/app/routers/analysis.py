@@ -71,11 +71,16 @@ async def upload_dataset(
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename is required.")
 
-    suffix = "." + file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    filename = file.filename
+    # The browser gzips a CSV before sending it as "name.csv.gz"; the analysis
+    # reads either form, and shows the name the visitor chose.
+    if filename.lower().endswith(".csv.gz"):
+        filename = filename[: -len(".gz")]
+    suffix = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     if suffix not in ALLOWED_SUFFIXES:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type. Use CSV or Excel (.csv, .xlsx, .xls).",
+            detail="Unsupported file type. Use CSV or Excel (.csv, .csv.gz, .xlsx, .xls).",
         )
 
     # The framework has already spooled the upload to a temporary file, so large
@@ -92,7 +97,7 @@ async def upload_dataset(
         raise HTTPException(status_code=400, detail="The file is empty.")
 
     try:
-        result = await run_full_analysis(source, file.filename, sheet)
+        result = await run_full_analysis(source, filename, sheet)
     except DatasetError as exc:
         # Our own messages about the file itself, written for the user.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -102,7 +107,7 @@ async def upload_dataset(
         # Anything else is a bug. The exception text can hold paths or data
         # values, so it goes to the log under a reference, not to the client.
         reference = uuid.uuid4().hex[:8]
-        logger.exception("Analysis failed for %r (reference %s)", file.filename, reference)
+        logger.exception("Analysis failed for %r (reference %s)", filename, reference)
         raise HTTPException(
             status_code=500,
             detail=f"Analysis failed because of a server error. Reference: {reference}.",
@@ -220,6 +225,7 @@ async def health():
         "llm_configured": explanation.is_llm_configured(),
         "llm_model": settings.llm_model if explanation.is_llm_configured() else None,
         "max_upload_mb": settings.max_upload_mb,
+        "max_csv_mb": settings.max_csv_mb,
         "max_excel_mb": settings.max_excel_mb,
         "max_analysis_rows": settings.max_analysis_rows,
     }
