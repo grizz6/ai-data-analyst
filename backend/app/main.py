@@ -62,8 +62,10 @@ async def reject_oversized_uploads(request: Request, call_next):
             if int(declared) > limit:
                 detail = analysis.too_large_detail() if is_upload else "Request body is too large."
                 return JSONResponse(status_code=413, content={"detail": detail})
-        elif not is_upload:
-            # Without a length the body could be any size; every client this app has sends one.
+        else:
+            # Without a length the body could be any size, and the framework spools a
+            # whole upload to disk before the endpoint can count it. Browsers always
+            # send one, for file uploads too.
             return JSONResponse(status_code=411, content={"detail": "Content-Length is required."})
     return await call_next(request)
 

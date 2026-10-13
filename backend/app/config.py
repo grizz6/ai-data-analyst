@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -59,7 +60,8 @@ class Settings(BaseSettings):
 
     # Language model used only to explain results. Any OpenAI-compatible
     # chat completions endpoint works; empty key means rule-based text.
-    llm_api_key: str = ""
+    # SecretStr keeps the key out of reprs, logs and error pages; read it with llm_key.
+    llm_api_key: SecretStr | str = SecretStr("")
     llm_base_url: str = "https://api.groq.com/openai/v1"
     # Groq retired Llama 3.3 70B on 2026-08-16 (requests then get 404) and recommends GPT-OSS 120B.
     llm_model: str = "openai/gpt-oss-120b"
@@ -76,8 +78,13 @@ class Settings(BaseSettings):
         return self.max_excel_mb * 1024 * 1024
 
     @property
+    def llm_key(self) -> str:
+        key = self.llm_api_key
+        return key.get_secret_value() if isinstance(key, SecretStr) else key
+
+    @property
     def llm_configured(self) -> bool:
-        return bool(self.llm_api_key.strip())
+        return bool(self.llm_key.strip())
 
 
 settings = Settings()

@@ -59,6 +59,9 @@ class SessionStore:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         # One connection shared by the event loop and the worker threads, guarded by the lock.
         self._db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
+        # Deleted analyses are overwritten with zeros, not just unlinked, so a
+        # visitor's data can't be read back out of the file after Delete.
+        self._db.execute("PRAGMA secure_delete = ON")
         self._db.executescript(_SCHEMA)
         last_seq = self._db.execute("SELECT COALESCE(MAX(use_seq), 0) FROM sessions").fetchone()[0]
         self._seq = itertools.count(last_seq + 1)

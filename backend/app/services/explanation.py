@@ -34,6 +34,13 @@ HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
 MAX_RECOMMENDATIONS = 6
 MAX_FACT_VARIABLES = 40
 MAX_STORY_POINTS = 5
+# A value seen in fewer rows than this can point at one person (an email, an ID
+# number, a name), so it is never sent to the model.
+MIN_SHARED_ROWS = 3
+REDACTED = f"[a value from fewer than {MIN_SHARED_ROWS} rows]"
+# Shorter private values ("A", "12") are only redacted where they are the whole
+# string; inside a sentence they would match unrelated text.
+MIN_REDACT_INSIDE_TEXT = 3
 
 GROUND_RULES = """\
 Rules you must follow:
@@ -67,7 +74,7 @@ def is_llm_configured() -> bool:
 
 def make_client() -> LLMClient:
     return LLMClient(
-        api_key=settings.llm_api_key,
+        api_key=settings.llm_key,
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         fallback_models=settings.llm_fallback_models,
@@ -75,7 +82,51 @@ def make_client() -> LLMClient:
 
 
 def build_facts(result: AnalysisResult) -> dict[str, Any]:
-    """Everything the model may talk about. It is not allowed to go beyond this."""
+    """Everything the model may talk about. It is not allowed to go beyond this.
+
+    Values that belong to only a row or two, and every value of a free-text or
+    ID column, are removed first: the model gets the file's shape, not its people.
+    """
+    private = _row_level_values(result)
+    return _redact(_all_facts(result), private, frozenset(c.name for c in result.columns))
+
+
+def _row_level_values(result: AnalysisResult) -> set[str]:
+    private: set[str] = set()
+    for summary in result.categorical_summaries:
+        for top in summary.top_values:
+            if int(top.get("count") or 0) < MIN_SHARED_ROWS:
+                private.add(str(top.get("value")))
+    for v in result.variables:
+        row_level = v.kind in ("text", "identifier")
+        for c in v.categories:
+            if row_level or c.count < MIN_SHARED_ROWS:
+                private.add(c.value)
+    for b in result.breakdowns:
+        private.update(g.label for g in b.groups if g.box.n < MIN_SHARED_ROWS)
+    return private
+
+
+def _redact(value: Any, private: set[str], keep: frozenset[str]) -> Any:
+    """A copy of `value` with private strings dropped from lists or replaced in text."""
+    if isinstance(value, dict):
+        if str(value.get("value")) in private and value.get("value") not in keep:
+            return None
+        return {k: _redact(v, private, keep) for k, v in value.items()}
+    if isinstance(value, list):
+        items = (_redact(v, private, keep) for v in value)
+        return [v for v in items if v is not None]
+    if isinstance(value, str) and value not in keep:
+        if value in private:
+            return REDACTED
+        for secret in private:
+            if len(secret) >= MIN_REDACT_INSIDE_TEXT and secret in value and secret not in keep:
+                value = value.replace(secret, REDACTED)
+        return value
+    return value
+
+
+def _all_facts(result: AnalysisResult) -> dict[str, Any]:
     return {
         "file": {
             "name": result.filename,

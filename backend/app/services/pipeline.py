@@ -41,9 +41,10 @@ async def run_full_analysis(
 def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None = None) -> AnalysisResult:
     """Every number in the result is computed here, synchronously."""
     table = ingestion.load_table(source, filename, sheet)
-    raw_df = table.df
+    # Infinite or overflowing numbers would turn every statistic into inf or an error.
+    raw_df, unusable = quality.unusable_numbers(table.df)
     identifiers = semantics.identifier_columns(raw_df)
-    quality_issues = quality.check_quality(raw_df, identifiers=identifiers)
+    quality_issues = unusable + quality.check_quality(raw_df, identifiers=identifiers)
 
     # prepared_df has duplicates and empty columns removed and dates parsed, but no
     # filled-in values: every statistic below comes from recorded data only.

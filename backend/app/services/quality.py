@@ -1,5 +1,6 @@
 from collections.abc import Collection
 
+import numpy as np
 import pandas as pd
 
 from app.models.schemas import QualityIssue
@@ -129,3 +130,39 @@ def _inconsistent_labels(df: pd.DataFrame, col) -> QualityIssue | None:
         ),
         details={"labels_affected": len(variants)},
     )
+
+
+# Beyond this, squaring a value (for a variance) or subtracting two (for a range)
+# overflows, so the number can't be analyzed. No real measurement comes close.
+MAX_MAGNITUDE = 1e100
+
+
+def unusable_numbers(df: pd.DataFrame) -> tuple[pd.DataFrame, list[QualityIssue]]:
+    """Infinite and astronomically large numbers, blanked so every statistic stays finite.
+
+    Returns a copy with those cells set to missing, and one issue per column saying so.
+    """
+    issues: list[QualityIssue] = []
+    out = df
+    for col in df.select_dtypes(include="number").columns:
+        values = df[col].astype("float64")
+        bad = ~np.isfinite(values) & values.notna() | (values.abs() > MAX_MAGNITUDE)
+        count = int(bad.sum())
+        if not count:
+            continue
+        if out is df:
+            out = df.copy()
+        out[col] = values.mask(bad)
+        issues.append(
+            QualityIssue(
+                severity="warning",
+                category="invalid_values",
+                column=str(col),
+                message=(
+                    f"Column '{col}' has {count:,} infinite or impossibly large value{'s' if count != 1 else ''} "
+                    f"(beyond ±1e100); {'they are' if count != 1 else 'it is'} treated as missing."
+                ),
+                details={"count": count},
+            )
+        )
+    return out, issues
