@@ -145,13 +145,17 @@ def _base(name: str, series: pd.Series, kind: VariableKind) -> VariableProfile:
         kind=kind,
         count=count,
         missing=missing,
-        missing_share=_round(100 * missing / len(series), 2) if len(series) else 0.0,
+        missing_share=sig(100 * missing / len(series), 2) if len(series) else 0.0,
         distinct=int(series.nunique()),
     )
     if profile.missing_share >= 5:
         profile.flags.append(f"{profile.missing_share:g}% of values are missing.")
     if kind == "constant":
-        profile.flags.append("Only one value: it can't explain or predict anything.")
+        profile.flags.append(
+            "One value plus blanks: the blanks may mean 'no' (a yes/no flag), so check before treating them as missing."
+            if missing and profile.distinct == 1
+            else "Only one value: it can't explain or predict anything."
+        )
     if kind == "identifier":
         unique = profile.distinct == count
         profile.flags.append(
@@ -179,10 +183,10 @@ def _numeric(
         return
     mean, std = float(values.mean()), float(values.std(ddof=1)) if len(values) > 1 else 0.0
     skew = float(values.skew()) if len(values) > 2 else None  # type: ignore[arg-type]
-    profile.mean, profile.median, profile.std = _round(mean), _round(float(values.median())), _round(std)
-    profile.min, profile.max = _round(float(values.min())), _round(float(values.max()))
-    profile.skewness = _round(skew, 3) if skew is not None and math.isfinite(skew) else None
-    profile.box = _box(values)
+    profile.mean, profile.median, profile.std = sig(mean), sig(float(values.median())), sig(std)
+    profile.min, profile.max = sig(float(values.min())), sig(float(values.max()))
+    profile.skewness = sig(skew, 3) if skew is not None and math.isfinite(skew) else None
+    profile.box = box_stats(values)
 
     if profile.skewness is not None and abs(profile.skewness) >= 1:
         side = "right" if profile.skewness > 0 else "left"
@@ -215,23 +219,23 @@ def _zoom(profile: VariableProfile, values: pd.Series) -> pd.Series:
     inside = values[(values >= q1 - reach) & (values <= q3 + reach)]
     if reach == 0 or len(inside) == len(values) or len(inside) < 8:
         return values
-    profile.view = [_round(float(inside.min())), _round(float(inside.max()))]
+    profile.view = [sig(float(inside.min())), sig(float(inside.max()))]
     profile.beyond_view = len(values) - len(inside)
     return inside
 
 
-def _box(values: pd.Series) -> BoxStats:
+def box_stats(values: pd.Series) -> BoxStats:
     q1, median, q3 = (float(v) for v in values.quantile([0.25, 0.5, 0.75]))
     reach = IQR_REACH * (q3 - q1)
     inside = values[(values >= q1 - reach) & (values <= q3 + reach)]
     return BoxStats(
         n=len(values),
-        q1=_round(q1),
-        median=_round(median),
-        q3=_round(q3),
-        low=_round(float(inside.min() if len(inside) else values.min())),
-        high=_round(float(inside.max() if len(inside) else values.max())),
-        mean=_round(float(values.mean())),
+        q1=sig(q1),
+        median=sig(median),
+        q3=sig(q3),
+        low=sig(float(inside.min() if len(inside) else values.min())),
+        high=sig(float(inside.max() if len(inside) else values.max())),
+        mean=sig(float(values.mean())),
     )
 
 
@@ -242,7 +246,7 @@ def _histogram(values: pd.Series, discrete: bool) -> Histogram:
     else:
         bins = np.histogram_bin_edges(values, bins=HISTOGRAM_BINS)
     counts, edges = np.histogram(values, bins=bins)
-    return Histogram(edges=[_round(float(e)) for e in edges], counts=[int(c) for c in counts])
+    return Histogram(edges=[sig(float(e)) for e in edges], counts=[int(c) for c in counts])
 
 
 def _density(values: pd.Series) -> Curve | None:
@@ -255,7 +259,7 @@ def _density(values: pd.Series) -> Curve | None:
         return None
     grid = np.linspace(values.min(), values.max(), DENSITY_POINTS)
     density = kde(grid)
-    return Curve(x=[_round(float(x)) for x in grid], y=[_round(float(y)) for y in density])
+    return Curve(x=[sig(float(x)) for x in grid], y=[sig(float(y)) for y in density])
 
 
 def _qq(values: pd.Series) -> Curve | None:
@@ -265,7 +269,7 @@ def _qq(values: pd.Series) -> Curve | None:
     probs = (np.arange(1, points + 1) - 0.5) / points
     theoretical = stats.norm.ppf(probs)
     sample = values.quantile(probs).to_numpy()
-    return Curve(x=[_round(float(t), 4) for t in theoretical], y=[_round(float(s)) for s in sample])
+    return Curve(x=[sig(float(t), 4) for t in theoretical], y=[sig(float(s)) for s in sample])
 
 
 def _outliers(
@@ -299,8 +303,8 @@ def _outliers(
         rows.append(
             OutlierRow(
                 row=int(idx) + 1 if isinstance(idx, (int, np.integer)) else 0,
-                value=_round(value),
-                z=_round(float(z[idx]), 2),
+                value=sig(value),
+                z=sig(float(z[idx]), 2),
                 rules=rules,
                 cause=causes[idx],
                 label=None if label is None or pd.isna(label) else str(label),
@@ -308,19 +312,19 @@ def _outliers(
         )
 
     return OutlierSummary(
-        iqr_low=_round(low),
-        iqr_high=_round(high),
+        iqr_low=sig(low),
+        iqr_high=sig(high),
         iqr_count=int(iqr_mask.sum()),
-        iqr_share=_round(100 * float(iqr_mask.mean()), 2),
+        iqr_share=sig(100 * float(iqr_mask.mean()), 2),
         z_threshold=Z_THRESHOLD,
         z_count=int(z_mask.sum()),
-        z_share=_round(100 * float(z_mask.mean()), 2),
-        mean_all=_round(mean),
-        mean_without=_round(float(kept.mean())) if len(kept) else _round(mean),
-        median_all=_round(median),
-        median_without=_round(float(kept.median())) if len(kept) else _round(median),
-        std_all=_round(std),
-        std_without=_round(float(kept.std(ddof=1))) if len(kept) > 1 else _round(std),
+        z_share=sig(100 * float(z_mask.mean()), 2),
+        mean_all=sig(mean),
+        mean_without=sig(float(kept.mean())) if len(kept) else sig(mean),
+        median_all=sig(median),
+        median_without=sig(float(kept.median())) if len(kept) else sig(median),
+        std_all=sig(std),
+        std_without=sig(float(kept.std(ddof=1))) if len(kept) > 1 else sig(std),
         correlation=_correlation_shift(df, name, partner, values.index[iqr_mask.to_numpy()]),
         rows=rows,
     )
@@ -371,7 +375,7 @@ def _correlation_shift(
     r_without = target[keep].corr(partner[keep])
     if pd.isna(r_all) or pd.isna(r_without):
         return None
-    return OutlierCorrelation(column=other, r_all=_round(float(r_all), 3), r_without=_round(float(r_without), 3))
+    return OutlierCorrelation(column=other, r_all=sig(float(r_all), 3), r_without=sig(float(r_without), 3))
 
 
 def _timeline(profile: VariableProfile, series: pd.Series, axis: TimeAxis) -> None:
@@ -389,16 +393,16 @@ def _timeline(profile: VariableProfile, series: pd.Series, axis: TimeAxis) -> No
         if steps.nunique() > TIMELINE_MAX_POINTS:
             bins = pd.cut(steps, TIMELINE_MAX_POINTS)
             grouped = frame.groupby(bins, observed=True)["v"].mean()
-            x = [_round(float(b.mid)) for b in grouped.index]
+            x = [sig(float(b.mid)) for b in grouped.index]
             profile.timeline_label = f"average per bucket along {axis.label}"
         else:
             grouped = frame.groupby(steps)["v"].mean()
-            x = [_round(float(s)) for s in grouped.index]
+            x = [sig(float(s)) for s in grouped.index]
             profile.timeline_label = f"along {axis.label}"
     if len(grouped) > TIMELINE_MAX_POINTS:
         grouped, x = grouped.iloc[-TIMELINE_MAX_POINTS:], x[-TIMELINE_MAX_POINTS:]
         profile.timeline_label += f" (last {TIMELINE_MAX_POINTS} periods)"
-    profile.timeline = Curve(x=x, y=[_round(float(v)) for v in grouped.to_numpy()])
+    profile.timeline = Curve(x=x, y=[sig(float(v)) for v in grouped.to_numpy()])
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +418,7 @@ def _binary(profile: VariableProfile, series: pd.Series) -> None:
         # No obvious "yes": call the rarer value the one being counted.
         positive = str(counts.index[-1])
     total = int(counts.sum())
-    share = _round(100 * int(counts[positive]) / total, 2)
+    share = sig(100 * int(counts[positive]) / total, 2)
     profile.binary = BinaryInfo(
         values=values, counts=[int(counts[v]) for v in values], positive=positive, positive_share=share
     )
@@ -471,12 +475,12 @@ def _compare_against(df: pd.DataFrame, binary: str, kinds: dict[str, VariableKin
                 BinaryComparison(
                     column=col,
                     kind="numeric",
-                    effect=_round(effect, 3),
+                    effect=sig(effect, 3),
                     effect_name="rank-biserial",
                     p_value=float(p),
                     detail=(
-                        f"median {_fmt(float(a.median()))} when {binary} = {positive} "
-                        f"vs {_fmt(float(b.median()))} when {negative}"
+                        f"median {fmt_number(float(a.median()))} when {binary} = {positive} "
+                        f"vs {fmt_number(float(b.median()))} when {negative}"
                     ),
                 )
             )
@@ -500,7 +504,7 @@ def _compare_against(df: pd.DataFrame, binary: str, kinds: dict[str, VariableKin
                 BinaryComparison(
                     column=col,
                     kind="category",
-                    effect=_round(v, 3),
+                    effect=sig(v, 3),
                     effect_name="Cramér's V",
                     p_value=float(p),
                     detail=detail,
@@ -508,7 +512,7 @@ def _compare_against(df: pd.DataFrame, binary: str, kinds: dict[str, VariableKin
             )
     adjusted = benjamini_hochberg([r.p_value if r.p_value is not None else 1.0 for r in results])
     for result, p_adj in zip(results, adjusted, strict=True):
-        result.p_value = _round(p_adj)
+        result.p_value = sig(p_adj)
     results.sort(key=lambda r: abs(r.effect), reverse=True)
     return results[:TOP_COMPARISONS]
 
@@ -524,7 +528,7 @@ def _split(df: pd.DataFrame, col: str, binary: str, comparisons: list[BinaryComp
         part = values[text == label].dropna()
         if len(part) < 3:
             return None
-        boxes.append(GroupBox(label=f"{binary} = {label}", box=_box(part.astype(float))))
+        boxes.append(GroupBox(label=f"{binary} = {label}", box=box_stats(part.astype(float))))
     match = next((c for c in comparisons if c.column == col), None)
     return BinarySplit(
         binary_column=binary,
@@ -546,13 +550,13 @@ def _categories(profile: VariableProfile, series: pd.Series) -> None:
         return
     top = counts.iloc[:TOP_CATEGORIES]
     profile.categories = [
-        CategoryCount(value=str(v), count=int(c), share=_round(100 * int(c) / total, 2)) for v, c in top.items()
+        CategoryCount(value=str(v), count=int(c), share=sig(100 * int(c) / total, 2)) for v, c in top.items()
     ]
     rest = total - int(top.sum())
     if rest:
         profile.categories.append(
             CategoryCount(
-                value=f"{len(counts) - len(top)} others", count=rest, share=_round(100 * rest / total, 2)
+                value=f"{len(counts) - len(top)} others", count=rest, share=sig(100 * rest / total, 2)
             )
         )
     if profile.kind == "category":
@@ -593,7 +597,7 @@ def _period(span_days: int) -> tuple[str, str]:
     return ("M", "month") if span_days <= 7_300 else ("Y", "year")
 
 
-def _round(value: float, digits: int = 6) -> float:
+def sig(value: float, digits: int = 6) -> float:
     """Six significant figures: exact enough to read, small enough to send."""
     if value == 0 or not math.isfinite(value):
         return 0.0 if not math.isfinite(value) else value
@@ -602,5 +606,5 @@ def _round(value: float, digits: int = 6) -> float:
     return float(f"{value:.6g}")
 
 
-def _fmt(value: float) -> str:
+def fmt_number(value: float) -> str:
     return f"{value:,.2f}".rstrip("0").rstrip(".") if value % 1 else f"{value:,.0f}"

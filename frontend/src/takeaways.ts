@@ -24,17 +24,6 @@ export function qualityTakeaway(r: AnalysisResult): string {
   return parts.join(" · ");
 }
 
-export function exploreTakeaway(r: AnalysisResult): string {
-  const skewed = r.statistics.distributions
-    .filter((d) => d.skewness !== null)
-    .sort((a, b) => Math.abs(b.skewness!) - Math.abs(a.skewness!))[0];
-  const parts = [`${r.numeric_summaries.length} numeric · ${r.categorical_summaries.length} category columns`];
-  if (skewed && Math.abs(skewed.skewness!) >= 1) parts.push(`most skewed: ${skewed.column} (${skewed.skewness!.toFixed(1)})`);
-  const outliers = r.statistics.distributions.reduce((sum, d) => sum + d.zscore_outliers, 0);
-  if (outliers > 0) parts.push(`${outliers.toLocaleString()} extreme value${outliers === 1 ? "" : "s"} (|z| > 3)`);
-  return parts.join(" · ");
-}
-
 export function relationshipsTakeaway(r: AnalysisResult): string {
   const pair = [...r.correlations].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))[0];
   const group = [...r.statistics.group_differences].sort((a, b) => b.eta_squared - a.eta_squared)[0];
@@ -51,17 +40,7 @@ export function timeSeriesTakeaway(r: AnalysisResult): string {
   const axis = r.time_axis ? ` over ${r.time_axis.label}` : "";
   const parts = [`${r.time_series.length} series${axis}`];
   if (seasonal) parts.push(`${seasonal} with a clear repeating pattern`);
-  const forecasts = r.time_series.filter((t) => t.forecast.length > 0).length;
-  if (forecasts) parts.push(`${forecasts} with a forecast`);
   return parts.join(" · ");
-}
-
-export function clusteringTakeaway(r: AnalysisResult): string {
-  const c = r.clustering;
-  if (!c) return "Grouping needs at least two numeric columns and 50 rows.";
-  return c.clear
-    ? `${c.k} distinct groups (silhouette ${c.silhouette.toFixed(2)}) · largest ${c.clusters[0].size.toLocaleString()} rows`
-    : `No clear groups (best silhouette ${c.silhouette.toFixed(2)}, at ${c.k} groups)`;
 }
 
 /** One line for a single column, by its kind. */
@@ -97,6 +76,6 @@ export function variablesTakeaway(r: AnalysisResult): string {
 
 export function suggestionsTakeaway(r: AnalysisResult): string {
   const recs = r.recommendations;
-  if (!recs.length) return "No analysis stands out for this file yet.";
-  return `${recs.length} analyses fit this file · start with: ${recs[0].title}`;
+  if (!recs.length) return "No follow-up analysis stands out for this data.";
+  return `${recs.length} analyses this data supports · start with: ${recs[0].title}`;
 }

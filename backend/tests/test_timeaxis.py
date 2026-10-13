@@ -104,14 +104,13 @@ def test_rows_grouped_by_category_are_not_a_sequence():
     assert find_time_axis(pd.DataFrame({"group": group, "value": value})) is None
 
 
-def test_step_series_are_analyzed_and_forecast_in_steps():
+def test_step_series_are_analyzed_in_steps():
     df = pd.DataFrame(
         {"t": np.arange(150), "signal": 10 * np.sin(2 * np.pi * np.arange(150) / 12) + rng.normal(0, 1, 150)}
     )
     (ts,) = analyze_time_series(df)
     assert ts.date_column == "t" and ts.frequency == "step"
     assert ts.seasonal_period == 12 and ts.seasonal_strength > 0.8
-    assert ts.forecast[0].date == "150"
     assert [c.id for c in ts.charts] == ["ts_signal", "ts_acf_signal", "ts_decomp_signal"]
 
 

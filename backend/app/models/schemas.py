@@ -210,13 +210,6 @@ class TimeAxisInfo(ApiModel):
     label: str
 
 
-class ForecastPoint(ApiModel):
-    date: str
-    value: float
-    lower: float
-    upper: float
-
-
 class TimeSeriesAnalysis(ApiModel):
     column: str
     date_column: str
@@ -237,94 +230,14 @@ class TimeSeriesAnalysis(ApiModel):
     # 0 to 1: how much of the variation the repeating seasonal pattern accounts for.
     seasonal_strength: float | None
     trend_strength: float | None
-    forecast_method: str
-    forecast: list[ForecastPoint] = Field(default_factory=list)
     charts: list[ChartSpec] = Field(default_factory=list)
     summary: str
-
-
-class ClusterProfile(ApiModel):
-    cluster: int
-    size: int
-    # Columns where this group sits furthest from the overall average, in standard deviations.
-    distinctive: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class ClusterAnalysis(ApiModel):
-    features: list[str]
-    rows_used: int
-    k: int
-    # -1 to 1; above about 0.5 is clear separation, under 0.25 is no real structure.
-    silhouette: float
-    clear: bool
-    clusters: list[ClusterProfile] = Field(default_factory=list)
-    # Share of the variation each principal component captures.
-    pca_explained: list[float] = Field(default_factory=list)
-    # Silhouette score for each number of groups tried, starting at 2.
-    k_scores: list[float] = Field(default_factory=list)
-    # Each group's average of every feature, in standard deviations from the overall average.
-    centers: list[list[float]] = Field(default_factory=list)
-    chart: ChartSpec | None = None
-    summary: str
-
-
-class ModelRequest(ApiModel):
-    target: str = Field(max_length=500)
-
-
-class ModelScore(ApiModel):
-    name: str
-    # "baseline", "linear", "neighbours", "bayes", "tree", "bagging", "boosting" or "kernel"
-    family: str
-    # The task's main metric (accuracy, or R²): mean and spread over cross-validation
-    # folds of the training rows, then on the training rows themselves and on the held-out test rows.
-    cv_mean: float
-    cv_std: float
-    train_score: float
-    test_score: float
-    # Macro F1 for classification, mean absolute error for regression, on the test rows.
-    test_secondary: float
-    # Area under the ROC curve on the test rows, for classification when the model gives scores.
-    test_auc: float | None = None
-    fit_seconds: float
-    # Train score more than 0.1 above test score.
-    overfit: bool
-
-
-class FeatureImportance(ApiModel):
-    feature: str
-    # Drop in the test score when this column is shuffled (permutation importance).
-    importance: float
-    spread: float
 
 
 class TargetSuggestion(ApiModel):
     column: str
     task: Literal["classification", "regression"]
     reason: str
-
-
-class ModelReport(ApiModel):
-    target: str
-    task: Literal["classification", "regression"]
-    primary_metric: str
-    secondary_metric: str
-    rows_used: int
-    train_rows: int
-    test_rows: int
-    features: list[str]
-    dropped_features: list[str] = Field(default_factory=list)
-    folds: int
-    scores: list[ModelScore]
-    # Chosen by cross-validation score, never by the test rows.
-    best_model: str
-    beats_baseline: bool
-    # Further test-set measures for the best model (e.g. precision, recall, RMSE).
-    best_test_metrics: dict[str, float] = Field(default_factory=dict)
-    importances: list[FeatureImportance] = Field(default_factory=list)
-    charts: list[ChartSpec] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
-    summary: str
 
 
 class ChatTurn(ApiModel):
@@ -433,6 +346,52 @@ class BinaryComparison(ApiModel):
     detail: str
 
 
+
+class DuplicateGroup(ApiModel):
+    """Rows that are exact copies of each other, numbered from 1 as in the file."""
+
+    rows: list[int]
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
+class Duplicates(ApiModel):
+    count: int
+    share: float
+    groups: list[DuplicateGroup] = Field(default_factory=list)
+
+
+class MissingDependency(ApiModel):
+    """Whether a column's gaps are random or depend on other columns."""
+
+    column: str
+    missing: int
+    missing_share: float
+    # Other columns that differ between rows where this one is missing and rows where it isn't.
+    related: list[BinaryComparison] = Field(default_factory=list)
+
+
+class CategoryBreakdown(ApiModel):
+    """A numeric column within each group of a category column."""
+
+    category: str
+    value: str
+    groups: list[GroupBox]
+    eta_squared: float
+    p_value: float | None = None
+
+
+class CategoryCrosstab(ApiModel):
+    """Counts of rows for each pair of values of two category columns."""
+
+    row: str
+    column: str
+    row_labels: list[str]
+    column_labels: list[str]
+    counts: list[list[int]]
+    cramers_v: float
+    p_value: float | None = None
+
+
 class VariableProfile(ApiModel):
     name: str
     kind: VariableKind
@@ -464,8 +423,9 @@ class VariableProfile(ApiModel):
 
 
 class RecommendationAction(ApiModel):
+    """Where in the exploration to look: a tab, and a column to open there."""
+
     tab: str
-    target: str | None = None
     column: str | None = None
     label: str
 
@@ -478,6 +438,8 @@ class Recommendation(ApiModel):
     columns: list[str] = Field(default_factory=list)
     action: RecommendationAction
     score: float = 0.0
+    # What to look at or fix in the data before running this analysis.
+    check_first: list[str] = Field(default_factory=list)
 
 
 class PlanRequest(ApiModel):
@@ -489,6 +451,7 @@ class PlanStep(ApiModel):
     title: str
     why: str
     action: RecommendationAction
+    check_first: list[str] = Field(default_factory=list)
 
 
 class PlanResponse(ApiModel):
@@ -536,12 +499,15 @@ class AnalysisResult(ApiModel):
     statistics: StatisticalTests = Field(default_factory=StatisticalTests)
     time_axis: TimeAxisInfo | None = None
     time_series: list[TimeSeriesAnalysis] = Field(default_factory=list)
-    clustering: ClusterAnalysis | None = None
-    # Charts for each dashboard tab ("overview", "quality", "explore", "relationships", "clustering").
+    # Charts for each dashboard tab ("overview", "quality", "explore", "relationships").
     visuals: dict[str, list[ChartSpec]] = Field(default_factory=dict)
     variables: list[VariableProfile] = Field(default_factory=list)
+    duplicates: Duplicates | None = None
+    missing_dependencies: list[MissingDependency] = Field(default_factory=list)
+    breakdowns: list[CategoryBreakdown] = Field(default_factory=list)
+    crosstabs: list[CategoryCrosstab] = Field(default_factory=list)
     recommendations: list[Recommendation] = Field(default_factory=list)
-    # Columns worth predicting, most likely first; the Models tab trains the first one.
+    # Columns that look like outcomes, most likely first; used to suggest next steps.
     model_targets: list[TargetSuggestion] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]

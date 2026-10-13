@@ -8,15 +8,15 @@ from app.services import (
     analysis,
     charts,
     cleaning,
+    eda,
     explanation,
     ingestion,
     insights,
-    ml,
-    modeling,
     profiling,
     quality,
     semantics,
     statistics,
+    targets,
     timeaxis,
     timeseries,
     variables,
@@ -64,11 +64,11 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
     # columns (a step counter, say) can order the rows even though they aren't analyzed.
     axis = timeaxis.find_time_axis(prepared_df)
     time_series = timeseries.analyze_time_series(metrics_df, axis) if axis else []
-    clustering = ml.cluster(metrics_df)
-    model_targets = modeling.suggest_targets(metrics_df)
+    model_targets = targets.suggest_targets(metrics_df)
     variable_profiles = variables.profile_variables(prepared_df, identifiers, axis)
+    kinds = {v.name: v.kind for v in variable_profiles if v.name in metrics_df.columns}
     tab_charts = visuals.build_visuals(
-        raw_df, metrics_df, quality_issues, statistical_tests, clustering, axis, identifiers
+        raw_df, metrics_df, quality_issues, statistical_tests, axis, identifiers
     )
     rule_insights = insights.generate_rule_insights(
         prepared_df,
@@ -139,10 +139,13 @@ def compute_analysis(source: ingestion.Source, filename: str, sheet: str | None 
         statistics=statistical_tests,
         time_axis=TimeAxisInfo(kind=axis.kind, columns=axis.columns, label=axis.label) if axis else None,
         time_series=time_series,
-        clustering=clustering,
         model_targets=model_targets,
         visuals=tab_charts,
         variables=variable_profiles,
+        duplicates=eda.duplicates(raw_df),
+        missing_dependencies=eda.missing_dependencies(metrics_df, kinds),
+        breakdowns=eda.breakdowns(metrics_df, kinds),
+        crosstabs=eda.crosstabs(metrics_df, kinds),
         explanation=empty_explanation,
         preview_rows=df_preview_records(raw_df),
         cleaned_preview_rows=df_preview_records(cleaned_df),

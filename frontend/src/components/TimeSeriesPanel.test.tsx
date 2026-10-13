@@ -14,7 +14,7 @@ describe("TimeSeriesPanel", () => {
     expect(screen.getByRole("heading", { name: /sales over date/ })).toBeInTheDocument();
     expect(screen.getAllByText("12 monthly")).toHaveLength(2);
     expect(screen.getAllByText("too few periods")).toHaveLength(2);
-    expect((await screen.findAllByTestId("ts-charts"))[0]).toHaveTextContent("sales: history and forecast");
+    expect((await screen.findAllByTestId("ts-charts"))[0]).toHaveTextContent("sales over time");
   });
 
   it("explains an empty section", () => {

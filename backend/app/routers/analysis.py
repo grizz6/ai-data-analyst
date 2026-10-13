@@ -16,14 +16,12 @@ from app.models.schemas import (
     ChartSpec,
     ChatTurn,
     CustomChartRequest,
-    ModelReport,
-    ModelRequest,
     PlanRequest,
     PlanResponse,
     QuestionRequest,
     QuestionResponse,
 )
-from app.services import advice, custom_charts, explanation, modeling, report
+from app.services import advice, custom_charts, eda, explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
 from app.session_store import add_chat_turn, delete, get, save
@@ -180,25 +178,17 @@ async def build_chart(session_id: str, body: CustomChartRequest):
         raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
 
 
-@router.post("/sessions/{session_id}/model", response_model=ModelReport)
-async def predict_column(session_id: str, body: ModelRequest):
-    """Compare models that predict one column from the others: held-out test set plus cross-validation."""
+@router.get("/sessions/{session_id}/dictionary.csv")
+async def download_dictionary(session_id: str):
+    """One row per column: type, completeness, range, most common value and notes."""
     result = session_or_404(session_id)
-    if result.chart_csv is None:
-        raise HTTPException(
-            status_code=404, detail="Prediction isn't available for this analysis; upload the file again."
-        )
-
-    def train() -> ModelReport:
-        df = custom_charts.load_chart_data(result, result.chart_csv or b"")
-        return modeling.predict(df, body.target)
-
-    try:
-        return await run_in_threadpool(run_in_slot, train)
-    except modeling.ModelRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except BusyError as exc:
-        raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
+    body = await run_in_threadpool(eda.data_dictionary_csv, result)
+    name = cleaned_filename(result.filename).removesuffix("-cleaned.csv") + "-dictionary.csv"
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.get("/sessions/{session_id}/report", response_class=HTMLResponse)

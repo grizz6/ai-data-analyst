@@ -15,9 +15,9 @@ def test_sample_file_gets_charts_on_every_relevant_tab(sample_csv_bytes):
     assert ids(result, "overview") == ["column_types", "row_completeness"]
     assert {"histograms", "category_counts", "box_plots", "rows_over_time"} <= set(ids(result, "explore"))
     rel = ids(result, "relationships")
-    assert {"corr_pearson", "corr_spearman", "scatter_matrix", "cramers_v", "crosstab"} <= set(rel)
-    assert "group_product_sales" in rel
-    assert "clustering" not in result.visuals  # 31 rows is too few to group
+    assert {"corr_pearson", "corr_spearman", "scatter_matrix", "cramers_v"} <= set(rel)
+    # Group comparisons and crosstabs are explored pair by pair, not drawn here.
+    assert not any(i.startswith("group_") or i == "crosstab" for i in rel)
 
 
 def test_gaps_are_mapped_and_counted():
@@ -28,21 +28,6 @@ def test_gaps_are_mapped_and_counted():
     assert {"missing_by_column", "missing_map"} <= set(quality)
     bars = quality["missing_by_column"].plotly_json["data"][0]
     assert dict(zip(bars["y"], bars["x"], strict=True))["b"] == 25.0
-
-
-def test_clustering_tab_explains_the_choice_of_k():
-    centres = [(0, 0), (6, 6), (0, 6)]
-    df = pd.DataFrame(np.vstack([rng.normal(c, 0.5, (60, 2)) for c in centres]), columns=["x", "y"])
-    result = compute_analysis(df.to_csv(index=False).encode(), "blobs.csv")
-    assert ids(result, "clustering") == [
-        "silhouette_by_k",
-        "cluster_sizes",
-        "cluster_profiles",
-        "pca_variance",
-        "clusters_pca",
-    ]
-    assert len(result.clustering.k_scores) == 5 and result.clustering.k == 3
-    assert len(result.clustering.centers) == 3
 
 
 def test_identifiers_are_counted_but_not_charted():

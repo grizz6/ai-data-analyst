@@ -41,10 +41,11 @@ def is_row_counter(series: pd.Series) -> bool:
 
 
 def identifier_columns(df: pd.DataFrame) -> list[str]:
+    # A name like has_phone or zip_known on a column with one or two values is a flag, not an ID.
     return [
         str(col)
         for col in df.columns
-        if looks_like_identifier_name(col) or is_row_counter(df[col])
+        if (looks_like_identifier_name(col) and df[col].nunique() > 2) or is_row_counter(df[col])
     ]
 
 

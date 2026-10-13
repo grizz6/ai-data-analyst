@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
-  <title>Data Analysis Report: {{ result.filename }}</title>
+  <title>Exploratory Data Analysis: {{ result.filename }}</title>
   <style>
     :root { --bg: #0f1419; --card: #1a2332; --card-2: #212c3d; --text: #e7ecf3; --muted: #8b9cb3; --accent: #3b82f6; --warn: #f59e0b; --error: #f87171; }
     * { box-sizing: border-box; }
@@ -45,14 +45,17 @@
   </style>
 </head>
 <body{% if for_print %} class="print"{% endif %}>
-  <h1>Data Analysis Report</h1>
+  <h1>Exploratory Data Analysis</h1>
   <p class="meta">{{ result.filename }} · {{ result.row_count | num }} rows · {{ result.column_count }} columns · Generated {{ generated_at }}</p>
+  {% set KIND = {"binary": "Yes / no", "number": "Number", "count": "Count", "category": "Category", "date": "Date", "identifier": "Identifier", "text": "Free text", "constant": "Constant"} %}
 
   <section>
-    <h2>Executive summary</h2>
+    <h2>What this dataset is</h2>
+    <p>{{ result.explanation.dataset_overview }}</p>
+    <h3>What it tells you</h3>
     <p>{{ result.explanation.analysis_summary }}</p>
     {% if result.explanation.recommendations %}
-    <h3>Recommendations</h3>
+    <h3>Check before using it</h3>
     <ul>
       {% for rec in result.explanation.recommendations %}
       <li>{{ rec }}</li>
@@ -61,10 +64,30 @@
     {% endif %}
   </section>
 
+  {% if result.variables %}
   <section>
-    <h2>Dataset overview</h2>
-    <p>{{ result.explanation.dataset_overview }}</p>
+    <h2>Columns</h2>
+    <table>
+      <thead>
+        <tr><th>Column</th><th>Type</th><th>Missing</th><th>Distinct</th><th>Median</th><th>Range</th><th>Outliers (IQR)</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        {% for v in result.variables %}
+        <tr>
+          <td>{{ v.name }}</td>
+          <td>{{ KIND.get(v.kind, v.kind) }}</td>
+          <td class="num">{{ v.missing_share | num }}%</td>
+          <td class="num">{{ v.distinct | num }}</td>
+          <td class="num">{% if v.median is not none %}{{ v.median | num }}{% elif v.binary %}{{ v.binary.positive_share | num }}% {{ v.binary.positive }}{% elif v.categories %}{{ v.categories[0].value }}{% else %}–{% endif %}</td>
+          <td class="num">{% if v.min is not none %}{{ v.min | num }} – {{ v.max | num }}{% else %}–{% endif %}</td>
+          <td class="num">{% if v.outliers %}{{ v.outliers.iqr_count | num }}{% else %}–{% endif %}</td>
+          <td>{{ v.flags | join(" ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </section>
+  {% endif %}
 
   <section>
     <h2>Data quality</h2>
@@ -77,65 +100,64 @@
     {% else %}
     <p>No major quality issues detected.</p>
     {% endif %}
-  </section>
-
-  <section>
-    <h2>Cleaning actions</h2>
+    {% if result.duplicates and result.duplicates.count %}
+    <h3>Duplicate rows</h3>
+    <p>{{ result.duplicates.count | num }} rows ({{ result.duplicates.share | num }}%) are exact copies of another row{% if result.duplicates.groups %}, for example rows {% for g in result.duplicates.groups[:3] %}{{ g.rows | join(" & ") }}{% if not loop.last %}; {% endif %}{% endfor %}{% endif %}.</p>
+    {% endif %}
+    {% set dependent = result.missing_dependencies | selectattr("related") | list %}
+    {% if dependent %}
+    <h3>Missing values that aren't random</h3>
+    <ul>
+      {% for m in dependent %}
+      <li><strong>{{ m.column }}</strong> ({{ m.missing_share | num }}% missing): {{ m.related | map(attribute="detail") | join("; ") }}.</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     {% if result.cleaning_actions %}
+    <h3>Cleaning applied to the downloadable copy</h3>
     <ul>
       {% for action in result.cleaning_actions %}
       <li>{{ action.description }}</li>
       {% endfor %}
     </ul>
-    {% else %}
-    <p>No cleaning actions were required.</p>
     {% endif %}
   </section>
 
+  {% set flagged = [] %}
+  {% for v in result.variables if v.outliers %}{% for r in v.outliers.rows if "genuine" not in r.cause and "plausible" not in r.cause %}{% set _ = flagged.append((v.name, r)) %}{% endfor %}{% endfor %}
+  {% if flagged %}
   <section>
-    <h2>Key insights</h2>
-    <ul>
-      {% for insight in result.rule_insights %}
-      <li><strong>{{ insight.title }}:</strong> {{ insight.message }}</li>
-      {% endfor %}
-    </ul>
-  </section>
-
-  <section>
-    <h2>Numeric summaries</h2>
-    {% if result.numeric_summaries %}
+    <h2>Values worth checking</h2>
     <table>
-      <thead>
-        <tr><th>Column</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th><th>Std</th></tr>
-      </thead>
-      <tbody>
-        {% for s in result.numeric_summaries %}
-        <tr>
-          <td>{{ s.column }}</td>
-          <td class="num">{{ s.mean | num }}</td>
-          <td class="num">{{ s.median | num }}</td>
-          <td class="num">{{ s.min | num }}</td>
-          <td class="num">{{ s.max | num }}</td>
-          <td class="num">{{ s.std | num }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
+      <tr><th>Column</th><th>Row</th><th>Value</th><th>Likely cause</th></tr>
+      {% for name, r in flagged %}
+      <tr><td>{{ name }}</td><td class="num">{{ r.row }}{% if r.label %} ({{ r.label }}){% endif %}</td><td class="num">{{ r.value | num }}</td><td>{{ r.cause }}</td></tr>
+      {% endfor %}
     </table>
-    {% else %}
-    <p>No numeric columns found.</p>
-    {% endif %}
   </section>
+  {% endif %}
 
   <section>
-    <h2>Correlations</h2>
+    <h2>Relationships</h2>
     {% if result.correlations %}
+    <h3>Numbers that move together</h3>
     <ul>
       {% for c in result.correlations %}
       <li>{{ c.column_a }} ↔ {{ c.column_b }}: {{ c.correlation }} (n = {{ c.n }}, {{ c.p_value | pval }})</li>
       {% endfor %}
     </ul>
     {% else %}
-    <p>No strong correlations detected among numeric columns.</p>
+    <p>No strong correlations among the numeric columns.</p>
+    {% endif %}
+    {% set by_group = result.breakdowns | selectattr("p_value", "ne", none) | selectattr("p_value", "lt", 0.05) | selectattr("eta_squared", "ge", 0.06) | sort(attribute="eta_squared", reverse=true) | list %}
+    {% if by_group %}
+    <h3>Numbers that differ by group</h3>
+    <table>
+      <tr><th>Value</th><th>By</th><th>Highest median</th><th>Lowest median</th><th>Explained</th><th>Adjusted p</th></tr>
+      {% for b in by_group[:10] %}
+      <tr><td>{{ b.value }}</td><td>{{ b.category }}</td><td>{{ b.groups[0].label }} ({{ b.groups[0].box.median | num }})</td><td>{{ b.groups[-1].label }} ({{ b.groups[-1].box.median | num }})</td><td class="num">{{ (b.eta_squared * 100) | round | int }}%</td><td>{{ b.p_value | pval }}</td></tr>
+      {% endfor %}
+    </table>
     {% endif %}
   </section>
 
@@ -183,28 +205,23 @@
   </section>
   {% endif %}
 
-  {% if result.clustering %}
-  <section>
-    <h2>Groups of similar rows</h2>
-    <p>{{ result.clustering.summary }}</p>
-    {% if result.clustering.clear %}
-    <table>
-      <tr><th>Group</th><th>Rows</th><th>Stands out for</th></tr>
-      {% for c in result.clustering.clusters %}
-      <tr><td>Group {{ c.cluster }}</td><td class="num">{{ c.size | num }}</td><td>{% for d in c.distinctive %}{{ d.column }} {{ "high" if d.sd_from_average > 0 else "low" }} (avg {{ d.mean | num }}){% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
-      {% endfor %}
-    </table>
-    {% endif %}
-  </section>
-  {% endif %}
-
   {% if result.time_series %}
   <section>
     <h2>Time series</h2>
     {% for ts in result.time_series %}
     <p><strong>{{ ts.column }}</strong> over {{ ts.date_column }}: {{ ts.summary }}</p>
     {% endfor %}
-    <p class="note">Forecast ranges are approximate 95% bands from the model's past errors; the charts below include them.</p>
+  </section>
+  {% endif %}
+
+  {% if result.recommendations %}
+  <section>
+    <h2>What this data could be used for next</h2>
+    <ol>
+      {% for rec in result.recommendations %}
+      <li><strong>{{ rec.title }}.</strong> {{ rec.why }}{% if rec.check_first %} <em>Check first:</em> {{ rec.check_first | join(" ") }}{% endif %}</li>
+      {% endfor %}
+    </ol>
   </section>
   {% endif %}
 

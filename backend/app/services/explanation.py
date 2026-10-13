@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
 MAX_RECOMMENDATIONS = 6
+MAX_FACT_VARIABLES = 40
+MAX_STORY_POINTS = 5
 MAX_QUESTION_CHARS = 1_000
 # Earlier questions and answers sent along with a new one, so "what about East?" makes sense.
 MAX_CONTEXT_TURNS = 6
@@ -49,15 +51,18 @@ Rules you must follow:
 - Reply with a single JSON object and nothing else."""
 
 EXPLAIN_SYSTEM_PROMPT = f"""\
-You explain the results of an automated data analysis. The numbers were computed by code;
-your job is only to explain what they mean.
+You write a short, plain-English story of what a dataset contains and what an automated
+exploratory data analysis (EDA) found in it. The numbers were computed by code; your job
+is only to say what they mean for someone about to work with this data.
 
 {GROUND_RULES}
 
 The JSON object must have exactly these keys:
-- "dataset_overview": 2 to 3 sentences on what the file contains and its data quality.
-- "analysis_summary": 3 to 5 sentences on the most important findings.
-- "recommendations": a list of up to 5 short, practical next steps.
+- "dataset_overview": 2 to 3 sentences: what the file holds (rows, kinds of columns) and how
+  complete and clean it is.
+- "analysis_summary": 3 to 5 sentences on what the data tells you: the most notable
+  distributions, outliers, missing-value patterns, relationships and group differences.
+- "recommendations": a list of up to 5 short things to check or fix in the data before using it.
 - "chart_explanations": a list of objects with "chart_id" (copied from the facts) and
   "explanation" (one or two sentences on what that chart shows)."""
 
@@ -108,14 +113,11 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
             for c in result.columns
         ],
         "quality_issues": [
-            {"severity": q.severity, "category": q.category, "message": q.message}
-            for q in result.quality_issues
+            {"severity": q.severity, "category": q.category, "message": q.message} for q in result.quality_issues
         ],
         "cleaning_actions": [a.description for a in result.cleaning_actions],
         "numeric_summaries": [s.model_dump() for s in result.numeric_summaries],
-        "top_categories": [
-            {"column": c.column, "top_values": c.top_values[:5]} for c in result.categorical_summaries
-        ],
+        "top_categories": [{"column": c.column, "top_values": c.top_values[:5]} for c in result.categorical_summaries],
         "correlations": [p.model_dump() for p in result.correlations],
         "trends": [t.model_dump() for t in result.trends],
         "findings": [i.message for i in result.rule_insights],
@@ -125,11 +127,9 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
                 "frequency": t.frequency,
                 "periods": t.points,
                 "summary": t.summary,
-                "forecast_end": t.forecast[-1].model_dump() if t.forecast else None,
             }
             for t in result.time_series
         ],
-        "clustering": result.clustering.summary if result.clustering else None,
         "statistical_tests": {
             "distributions": [
                 {
@@ -145,7 +145,49 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
             "group_differences": [g.model_dump() for g in result.statistics.group_differences[:5]],
         },
         "charts": [{"chart_id": c.id, "title": c.title, "type": c.chart_type} for c in result.charts],
+        "columns_profiled": [_variable_fact(v) for v in result.variables[:MAX_FACT_VARIABLES]],
+        "duplicates": result.duplicates.model_dump(exclude={"groups"}) if result.duplicates else None,
+        "missing_value_patterns": [
+            {"column": m.column, "missing_percent": m.missing_share, "related": [r.detail for r in m.related]}
+            for m in result.missing_dependencies
+        ],
+        "numbers_by_group": [
+            {
+                "value": b.value,
+                "by": b.category,
+                "share_of_variation_explained": b.eta_squared,
+                "highest_group": b.groups[0].label,
+                "highest_median": b.groups[0].box.median,
+                "lowest_group": b.groups[-1].label,
+                "lowest_median": b.groups[-1].box.median,
+            }
+            for b in _notable_breakdowns(result)
+        ],
     }
+
+
+def _variable_fact(v) -> dict[str, Any]:
+    fact: dict[str, Any] = {"name": v.name, "kind": v.kind, "missing_percent": v.missing_share, "distinct": v.distinct}
+    if v.median is not None:
+        fact.update(median=v.median, mean=v.mean, min=v.min, max=v.max, skewness=v.skewness)
+    if v.outliers:
+        fact["outliers_iqr"] = v.outliers.iqr_count
+        fact["suspicious_values"] = [
+            {"value": r.value, "likely_cause": r.cause} for r in v.outliers.rows if "genuine" not in r.cause
+        ][:3]
+    if v.binary:
+        fact["split"] = {"value": v.binary.positive, "percent": v.binary.positive_share}
+        fact["differs_most_by"] = [c.detail for c in v.compared[:2] if c.p_value is not None and c.p_value < 0.05]
+    if v.categories:
+        fact["most_common"] = {"value": v.categories[0].value, "percent": v.categories[0].share}
+    if v.flags:
+        fact["notes"] = v.flags
+    return fact
+
+
+def _notable_breakdowns(result: AnalysisResult) -> list:
+    real = [b for b in result.breakdowns if b.p_value is not None and b.p_value < 0.05 and b.eta_squared >= 0.06]
+    return sorted(real, key=lambda b: b.eta_squared, reverse=True)[:5]
 
 
 # ---------------------------------------------------------------------------
@@ -156,29 +198,76 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
 def rule_based_explanation(
     result: AnalysisResult, *, configured: bool = False, fallback_reason: str | None = None
 ) -> Explanation:
-    issue_count = len(result.quality_issues)
-    overview = (
-        f"'{result.filename}' has {result.row_count:,} rows and {result.column_count} columns "
-        f"after cleaning. {issue_count} data quality issue{'s' if issue_count != 1 else ''} "
-        "were flagged before cleaning. Every figure in this analysis was computed with Pandas."
-    )
-
-    highlights = [i.message for i in result.rule_insights if i.category in HIGHLIGHT_CATEGORIES]
-    summary = (
-        " ".join(highlights[:4])
-        if highlights
-        else "No strong correlations, trends, or dominant categories stood out in this file."
-    )
-
     return Explanation(
-        dataset_overview=overview,
+        dataset_overview=_story_overview(result),
         chart_explanations=[],
-        analysis_summary=summary,
+        analysis_summary=" ".join(_story_points(result)) or "No strong patterns stood out in this file.",
         recommendations=_recommendations(result),
         configured=configured,
         source="rule_based",
         fallback_reason=fallback_reason,
     )
+
+
+KIND_WORDS = {
+    "number": "numeric",
+    "count": "count",
+    "binary": "yes/no",
+    "category": "category",
+    "date": "date",
+    "text": "free-text",
+    "identifier": "ID",
+    "constant": "constant",
+}
+
+
+def _story_overview(result: AnalysisResult) -> str:
+    kinds: dict[str, int] = {}
+    for v in result.variables:
+        kinds[v.kind] = kinds.get(v.kind, 0) + 1
+    listed = ", ".join(f"{n} {KIND_WORDS.get(k, k)}" for k, n in sorted(kinds.items(), key=lambda kv: -kv[1]))
+    cells = sum(v.count + v.missing for v in result.variables)
+    filled = 100 * sum(v.count for v in result.variables) / cells if cells else 100.0
+    parts = [f"'{result.filename}' has {result.row_count:,} rows and {result.column_count} columns ({listed})."]
+    parts.append(f"{filled:.1f}% of cells are filled.")
+    if result.duplicates and result.duplicates.count:
+        parts.append(f"{result.duplicates.count:,} rows are exact duplicates.")
+    issues = len(result.quality_issues)
+    parts.append(f"{issues} data quality issue{'s were' if issues != 1 else ' was'} flagged.")
+    return " ".join(parts)
+
+
+def _story_points(result: AnalysisResult) -> list[str]:
+    points: list[str] = []
+    for v in result.variables:
+        suspicious = [
+            r
+            for r in (v.outliers.rows if v.outliers else [])
+            if "genuine" not in r.cause and "plausible" not in r.cause
+        ]
+        if suspicious:
+            values = ", ".join(f"{r.value:g}" for r in suspicious[:3])
+            points.append(f"'{v.name}' has values that look like entry errors ({values}).")
+    for m in result.missing_dependencies:
+        if m.related:
+            points.append(f"Gaps in '{m.column}' aren't random: {m.related[0].detail}.")
+    if result.correlations:
+        c = max(result.correlations, key=lambda p: abs(p.correlation))
+        points.append(f"'{c.column_a}' and '{c.column_b}' move together (r = {c.correlation:.2f}).")
+    for b in _notable_breakdowns(result)[:2]:
+        points.append(
+            f"'{b.value}' differs by '{b.category}': highest in {b.groups[0].label} "
+            f"(median {b.groups[0].box.median:g}), lowest in {b.groups[-1].label} (median {b.groups[-1].box.median:g})."
+        )
+    for v in result.variables:
+        if v.binary and v.compared and v.compared[0].p_value is not None and v.compared[0].p_value < 0.05:
+            points.append(f"For '{v.name}', {v.compared[0].detail}.")
+    skewed = [
+        v.name for v in result.variables if v.kind == "number" and v.skewness is not None and abs(v.skewness) >= 1
+    ]
+    if skewed:
+        points.append(f"Skewed columns ({', '.join(skewed[:3])}) are better described by their median than their mean.")
+    return points[:MAX_STORY_POINTS]
 
 
 def _recommendations(result: AnalysisResult) -> list[str]:
@@ -218,7 +307,14 @@ def _recommendations(result: AnalysisResult) -> list[str]:
                 "before relying on its average."
             )
         elif issue.category == "constant":
-            recs.append(f"'{issue.column}' holds a single value, so it adds nothing to the analysis.")
+            profile = next((v for v in result.variables if v.name == issue.column), None)
+            if profile and profile.missing:
+                recs.append(
+                    f"'{issue.column}' has one value plus blanks: check whether a blank means 'no' "
+                    "before treating it as missing."
+                )
+            else:
+                recs.append(f"'{issue.column}' holds a single value, so it adds nothing to the analysis.")
 
     if not recs:
         recs.append("No data quality problems were found, so the figures can be read as they are.")
@@ -233,8 +329,7 @@ def rule_based_answer(
     opening = (
         "The language model couldn't answer just now, so here is what the analysis found:"
         if configured
-        else "Free-form questions need an LLM API key on the server, and none is set. "
-        "Here is what the analysis found:"
+        else "Free-form questions need an LLM API key on the server, and none is set. Here is what the analysis found:"
     )
     return QuestionResponse(
         answer=f"{opening}\n{highlights or '- No insights were generated for this file.'}",
@@ -288,17 +383,13 @@ async def explain_analysis(result: AnalysisResult, client: LLMClient | None = No
     )
 
 
-async def answer_question(
-    result: AnalysisResult, question: str, client: LLMClient | None = None
-) -> QuestionResponse:
+async def answer_question(result: AnalysisResult, question: str, client: LLMClient | None = None) -> QuestionResponse:
     if not is_llm_configured():
         return rule_based_answer(result, configured=False)
 
     client = client or make_client()
     facts = build_facts(result)
-    earlier = [
-        {"question": t.question, "answer": t.answer} for t in result.chat_history[-MAX_CONTEXT_TURNS:]
-    ]
+    earlier = [{"question": t.question, "answer": t.answer} for t in result.chat_history[-MAX_CONTEXT_TURNS:]]
     payload: dict[str, Any] = {"question": question[:MAX_QUESTION_CHARS], "facts": facts}
     if earlier:
         payload["earlier_conversation"] = earlier

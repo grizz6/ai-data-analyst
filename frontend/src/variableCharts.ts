@@ -32,7 +32,7 @@ function valueAxis(v: VariableProfile): Record<string, unknown> {
   return { title: { text: v.name }, range: [low - pad, high + pad] };
 }
 
-function boxTrace(name: string, box: BoxStats): Trace {
+export function boxTrace(name: string, box: BoxStats): Trace {
   return {
     type: "box",
     name,

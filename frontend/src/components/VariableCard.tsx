@@ -20,8 +20,8 @@ export const KIND_LABELS: Record<VariableProfile["kind"], string> = {
 };
 
 const KIND_HINTS: Record<VariableProfile["kind"], string> = {
-  binary: "Exactly two values (0/1, true/false, yes/no). Suits logistic regression as a target.",
-  number: "A measurement on a continuous scale. Suits linear regression as a target.",
+  binary: "Exactly two values (0/1, true/false, yes/no). The kind of outcome logistic regression predicts.",
+  number: "A measurement on a continuous scale, the kind of outcome linear regression predicts.",
   count: "Whole numbers with few distinct values, such as number of children.",
   category: "Labels that repeat. Compared across groups; one-hot encoded for models.",
   date: "Dates or times: the axis for time-series analysis.",
@@ -32,10 +32,9 @@ const KIND_HINTS: Record<VariableProfile["kind"], string> = {
 
 interface Props {
   variable: VariableProfile;
-  onTrain?: (target: string) => void;
 }
 
-export default function VariableCard({ variable: v, onTrain }: Props) {
+export default function VariableCard({ variable: v }: Props) {
   const charts = variableCharts(v);
   const numeric = v.kind === "number" || v.kind === "count";
   return (
@@ -101,7 +100,7 @@ export default function VariableCard({ variable: v, onTrain }: Props) {
       )}
 
       {v.outliers && <Outliers v={v} />}
-      {v.binary && <BinaryComparisons v={v} onTrain={onTrain} />}
+      {v.binary && <BinaryComparisons v={v} />}
     </article>
   );
 }
@@ -210,7 +209,7 @@ function Outliers({ v }: { v: VariableProfile }) {
   );
 }
 
-function BinaryComparisons({ v, onTrain }: { v: VariableProfile; onTrain?: (target: string) => void }) {
+function BinaryComparisons({ v }: { v: VariableProfile }) {
   const b = v.binary!;
   return (
     <section className="stats-section" aria-label="What differs between the groups">
@@ -219,11 +218,6 @@ function BinaryComparisons({ v, onTrain }: { v: VariableProfile; onTrain?: (targ
           What differs between {b.positive} and the rest{" "}
           <Hint text="Numbers: rank-biserial correlation (−1 to 1; positive means higher when the value is the counted one). Categories: Cramér's V (0 to 1). p-values adjusted for testing many columns." />
         </h4>
-        {onTrain && (
-          <button type="button" className="btn small-btn" onClick={() => onTrain(v.name)}>
-            Train models on {v.name}
-          </button>
-        )}
       </div>
       {v.compared.length === 0 ? (
         <p className="muted">No other column to compare.</p>

@@ -19,10 +19,9 @@ interface Props {
   variables: VariableProfile[];
   selected: string | null;
   onSelect: (name: string) => void;
-  onTrain?: (target: string) => void;
 }
 
-export default function VariablesPanel({ variables, selected, onSelect, onTrain }: Props) {
+export default function VariablesPanel({ variables, selected, onSelect }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const test = FILTERS.find(([id]) => id === filter)![2];
@@ -84,7 +83,7 @@ export default function VariablesPanel({ variables, selected, onSelect, onTrain 
           {shown.length === 0 && <li className="muted small">No column matches.</li>}
         </ul>
       </aside>
-      {current && <VariableCard key={current.name} variable={current} onTrain={onTrain} />}
+      {current && <VariableCard key={current.name} variable={current} />}
     </div>
   );
 }

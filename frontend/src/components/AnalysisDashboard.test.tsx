@@ -4,12 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, sampleResult } from "../test/fixtures";
 import AnalysisDashboard from "./AnalysisDashboard";
 
-// The Models panel trains on load and is tested on its own.
-vi.mock("./MachineLearningPanel", () => ({
-  default: ({ request }: { request: { target: string } | null }) => (
-    <div data-testid="ml-panel">{request ? `training ${request.target}` : ""}</div>
-  ),
-}));
 // Plotly needs a real canvas and layout engine; the chart grid has nothing to test here.
 vi.mock("./ChartGrid", () => ({
   default: ({ charts }: { charts: unknown[] }) => <div data-testid="chart-grid">{charts.length} charts</div>,
@@ -20,18 +14,20 @@ async function openTab(name: string) {
   return screen.getByRole("tabpanel");
 }
 
-function summary() {
-  return screen.getByText("Summary and key findings").closest("details") as HTMLElement;
+function story() {
+  return screen.getByLabelText("What this dataset tells you");
 }
 
 describe("AnalysisDashboard", () => {
   // The open tab is kept in the address; start each test on the overview.
   afterEach(() => window.history.replaceState(null, "", "#"));
 
-  it("labels a rule-based summary and says why", () => {
-    render(<AnalysisDashboard result={sampleResult()} />);
+  it("opens with the dataset's story and labels who wrote it", () => {
+    const result = sampleResult;
+    render(<AnalysisDashboard result={result()} />);
 
-    expect(within(summary()).getByText(/^Rule-based summary\. Set an LLM API key/)).toBeInTheDocument();
+    expect(within(story()).getByText("Rule-based summary, built from the computed results.")).toBeInTheDocument();
+    expect(within(story()).getByText(result().explanation.dataset_overview)).toBeInTheDocument();
   });
 
   it("names the model when a language model wrote the summary", () => {
@@ -40,7 +36,7 @@ describe("AnalysisDashboard", () => {
 
     render(<AnalysisDashboard result={result} />);
 
-    expect(within(summary()).getByText(/^Written by llama-3\.3-70b-versatile/)).toBeInTheDocument();
+    expect(within(story()).getByText(/^Written by llama-3\.3-70b-versatile/)).toBeInTheDocument();
   });
 
   it("explains a fallback when the model's text was rejected", () => {
@@ -61,8 +57,8 @@ describe("AnalysisDashboard", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "sales_sample.csv" })).toBeInTheDocument();
     expect(screen.getByText(/31 rows · 5 columns/)).toBeInTheDocument();
-    const explore = await openTab("Explore");
-    const sales = within(within(explore).getByRole("table", { name: "Numeric statistics" })).getByText("sales");
+    const overview = screen.getByRole("tabpanel");
+    const sales = within(within(overview).getByRole("table", { name: "Numeric statistics" })).getByText("sales");
     expect(within(sales.closest("tr") as HTMLElement).getByText("9,419.35")).toBeInTheDocument();
     const data = await openTab("Data");
     const date = within(within(data).getByRole("table", { name: "Column profiles" })).getByText("date");
@@ -88,6 +84,17 @@ describe("AnalysisDashboard", () => {
 
     await openTab("Data quality");
     expect(window.location.hash).toBe("#quality");
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Overview",
+      "Data quality",
+      "Variables",
+      "Relationships",
+      "Over time",
+      "Next steps",
+      "Ask",
+      "Build a chart",
+      "Data",
+    ]);
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByRole("tab", { name: "Variables" })).toHaveFocus();
     expect(screen.getByRole("tab", { name: "Variables" })).toHaveAttribute("aria-selected", "true");
@@ -96,11 +103,6 @@ describe("AnalysisDashboard", () => {
   it("shows a time series tab only when the file has one", () => {
     render(<AnalysisDashboard result={sampleResult({ time_series: [] })} />);
     expect(screen.queryByRole("tab", { name: "Time series" })).not.toBeInTheDocument();
-  });
-
-  it("starts training models in the background before the Models tab is opened", () => {
-    render(<AnalysisDashboard result={sampleResult()} />);
-    expect(screen.getByTestId("ml-panel")).not.toBeVisible();
   });
 
   it("sends a question with Enter, but Shift+Enter starts a new line", async () => {
@@ -127,7 +129,7 @@ describe("AnalysisDashboard", () => {
     expect(within(within(relationships).getByRole("list", { name: "Correlations" })).getByText(/n = 31, p < 0.001/)).toBeInTheDocument();
   });
 
-  it("links both downloads to this session", () => {
+  it("links every download to this session", () => {
     const result = sampleResult();
     render(<AnalysisDashboard result={result} />);
 
@@ -138,6 +140,10 @@ describe("AnalysisDashboard", () => {
     expect(screen.getByRole("link", { name: "Cleaned CSV" })).toHaveAttribute(
       "href",
       `/api/sessions/${result.session_id}/cleaned.csv`,
+    );
+    expect(screen.getByRole("link", { name: "Data dictionary" })).toHaveAttribute(
+      "href",
+      `/api/sessions/${result.session_id}/dictionary.csv`,
     );
   });
 
@@ -165,10 +171,11 @@ describe("AnalysisDashboard", () => {
   it("loads each tab's charts lazily", async () => {
     const result = sampleResult();
     render(<AnalysisDashboard result={result} />);
-    // The overview's own charts plus the automatic ones.
-    expect(await screen.findByTestId("chart-grid")).toHaveTextContent(`${result.visuals.overview.length + 2} charts`);
+    // The overview shows its own charts and every column at a glance.
+    const atAGlance = result.visuals.overview.length + result.visuals.explore.length;
+    expect(await screen.findByTestId("chart-grid")).toHaveTextContent(`${atAGlance} charts`);
     await openTab("Relationships");
-    expect(await screen.findByTestId("chart-grid")).toHaveTextContent(`${result.visuals.relationships.length} charts`);
+    expect((await screen.findAllByTestId("chart-grid"))[0]).toHaveTextContent(`${result.visuals.relationships.length} charts`);
   });
 
   it("asks a question and shows the answer", async () => {
@@ -261,14 +268,46 @@ describe("AnalysisDashboard", () => {
     expect(await screen.findByText("This analysis wasn't found.")).toBeInTheDocument();
   });
 
-  it("runs a suggestion: training opens the Models tab on that target", async () => {
-    render(<AnalysisDashboard result={sampleResult()} />);
-    const suggestions = await openTab("Suggestions");
-    const list = within(suggestions).getByRole("region", { name: "What to run next" });
-    await userEvent.click(within(list).getByRole("button", { name: "Train models on sales" }));
+  it("lists next steps with what to check first, linking back to the exploration", async () => {
+    const result = sampleResult();
+    render(<AnalysisDashboard result={result} />);
+    const next = await openTab("Next steps");
+    const list = within(next).getByRole("region", { name: "What this data could be used for" });
+    const first = result.recommendations[0];
+    expect(within(list).getByText(first.why)).toBeInTheDocument();
+    await userEvent.click(within(list).getAllByRole("button", { name: first.action.label })[0]);
+    expect(screen.getByRole("tab", { selected: true })).not.toHaveTextContent("Next steps");
+  });
 
-    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("ml-panel")).toHaveTextContent("training sales");
+  it("shows duplicates and missing-value patterns on the quality tab", async () => {
+    const result = sampleResult({
+      duplicates: { count: 2, share: 1.5, groups: [{ rows: [1, 40], values: { region: "West" } }] },
+      missing_dependencies: [
+        {
+          column: "units",
+          missing: 4,
+          missing_share: 12.9,
+          related: [
+            { column: "region", kind: "category", effect: 0.4, effect_name: "Cramér's V", p_value: 0.01, detail: "units is missing in 40% of 'East' rows vs 13% overall" },
+          ],
+        },
+      ],
+    });
+    render(<AnalysisDashboard result={result} />);
+    const quality = await openTab("Data quality");
+    expect(within(within(quality).getByRole("table", { name: "Duplicate groups" })).getByText("1, 40")).toBeInTheDocument();
+    expect(within(quality).getByText(/40% of 'East' rows vs 13% overall/)).toBeInTheDocument();
+  });
+
+  it("explores any number by any category, and any two categories together", async () => {
+    render(<AnalysisDashboard result={sampleResult()} />);
+    const relationships = await openTab("Relationships");
+    const byGroup = within(relationships).getByRole("region", { name: "A number by group" });
+    await userEvent.selectOptions(within(byGroup).getByLabelText("Group by"), "region");
+    await userEvent.selectOptions(within(byGroup).getByLabelText("Number"), "units");
+    expect(within(byGroup).getByText(/^region explains .*% of units/)).toBeInTheDocument();
+    const pair = within(relationships).getByRole("region", { name: "Two categories together" });
+    expect(within(pair).getByText(/^Cramér's V/)).toBeInTheDocument();
   });
 
   it("opens a column's card from the Variables tab", async () => {

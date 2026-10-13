@@ -14,7 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from app.models.schemas import ChartSpec, ClusterAnalysis, QualityIssue, StatisticalTests
+from app.models.schemas import ChartSpec, QualityIssue, StatisticalTests
 from app.services.semantics import is_categorical
 from app.services.timeaxis import TimeAxis
 from app.utils.json_compat import plotly_figure_to_dict
@@ -36,7 +36,6 @@ def build_visuals(
     metrics_df: pd.DataFrame,
     quality_issues: list[QualityIssue],
     statistics: StatisticalTests,
-    clustering: ClusterAnalysis | None,
     axis: TimeAxis | None,
     identifiers: list[str],
 ) -> dict[str, list[ChartSpec]]:
@@ -49,6 +48,7 @@ def build_visuals(
             for c in (
                 _missing_by_column(raw_df),
                 _missing_map(raw_df),
+                _missing_together(raw_df),
                 _outliers(metrics_df, numeric),
                 _issues(quality_issues),
             )
@@ -70,13 +70,10 @@ def build_visuals(
                 _correlation_heatmap(metrics_df, numeric, "pearson"),
                 _correlation_heatmap(metrics_df, numeric, "spearman"),
                 _scatter_matrix(metrics_df, numeric, categorical),
-                *_group_boxes(metrics_df, statistics),
                 _cramers_heatmap(statistics, categorical),
-                _crosstab(metrics_df, statistics),
             )
             if c
         ],
-        "clustering": _clustering(clustering) if clustering else [],
     }
     return {tab: charts for tab, charts in visuals.items() if charts}
 
@@ -173,6 +170,20 @@ def _missing_map(raw: pd.DataFrame) -> ChartSpec | None:
     fig.update_coloraxes(showscale=False)
     fig.update_xaxes(showticklabels=False)
     return _spec(fig, "missing_map", "Where values are missing", "heatmap", max(300, 22 * len(raw.columns)))
+
+
+def _missing_together(raw: pd.DataFrame) -> ChartSpec | None:
+    """Correlation of the columns' "is missing" flags: near 1 means they go missing together."""
+    gaps = raw.isna()
+    partly = [c for c in gaps.columns if 0 < gaps[c].mean() < 1][:MAX_HEATMAP_COLUMNS]
+    if len(partly) < 2:
+        return None
+    corr = gaps[partly].astype(float).corr().round(2)
+    corr.index = corr.columns = pd.Index([str(c) for c in partly])
+    fig = px.imshow(corr, text_auto=len(partly) <= 12, color_continuous_scale="RdBu", zmin=-1, zmax=1, aspect="auto")
+    return _spec(
+        fig, "missing_together", "Which columns go missing together", "heatmap", max(320, 28 * len(partly) + 120)
+    )
 
 
 def _outliers(df: pd.DataFrame, numeric: list[str]) -> ChartSpec | None:
@@ -361,25 +372,6 @@ def _scatter_matrix(df: pd.DataFrame, numeric: list[str], categorical: list[str]
     return _spec(fig, "scatter_matrix", title, "scatter", 260 * rows + 80)
 
 
-def _group_boxes(df: pd.DataFrame, statistics: StatisticalTests) -> list[ChartSpec]:
-    charts = []
-    for diff in statistics.group_differences[:3]:
-        order = (
-            df.groupby(diff.group_column, observed=True)[diff.value_column].median().sort_values(ascending=False).index
-        )
-        frame = df[[diff.group_column, diff.value_column]].dropna()
-        frame = frame.sample(n=min(len(frame), 5_000), random_state=SEED)
-        fig = px.box(
-            frame,
-            x=diff.group_column,
-            y=diff.value_column,
-            category_orders={diff.group_column: [str(o) for o in order]},
-        )
-        title = f"{diff.value_column} by {diff.group_column} (η² {diff.eta_squared:.2f})"
-        charts.append(_spec(fig, f"group_{diff.group_column}_{diff.value_column}", title, "box", 360))
-    return charts
-
-
 def _cramers_heatmap(statistics: StatisticalTests, categorical: list[str]) -> ChartSpec | None:
     pairs = statistics.categorical_associations
     names = sorted(
@@ -394,67 +386,3 @@ def _cramers_heatmap(statistics: StatisticalTests, categorical: list[str]) -> Ch
     return _spec(
         fig, "cramers_v", "Association between categories (Cramér's V)", "heatmap", max(320, 40 * len(names) + 120)
     )
-
-
-def _crosstab(df: pd.DataFrame, statistics: StatisticalTests) -> ChartSpec | None:
-    if not statistics.categorical_associations:
-        return None
-    top = statistics.categorical_associations[0]
-    table = pd.crosstab(df[top.column_a], df[top.column_b], normalize="index").round(4) * 100
-    table = table.loc[table.index[:MAX_CATEGORY_BARS]]
-    fig = go.Figure(
-        [
-            go.Bar(name=str(col), x=[str(i) for i in table.index], y=table[col].values)
-            for col in table.columns[:MAX_CATEGORY_BARS]
-        ]
-    )
-    fig.update_layout(
-        barmode="stack", xaxis_title=top.column_a, yaxis_title=f"% by {top.column_b}", legend={"orientation": "h"}
-    )
-    return _spec(fig, "crosstab", f"{top.column_b} within each {top.column_a}", "bar", 380)
-
-
-# ---------------------------------------------------------------------------
-# Clustering
-# ---------------------------------------------------------------------------
-
-
-def _clustering(c: ClusterAnalysis) -> list[ChartSpec]:
-    charts = []
-    ks = list(range(2, 2 + len(c.k_scores)))
-    fig = go.Figure(go.Scatter(x=ks, y=c.k_scores, mode="lines+markers"))
-    fig.add_hline(y=0.25, line_dash="dot")
-    fig.add_vline(x=c.k, line_dash="dot")
-    fig.update_layout(xaxis_title="number of groups (k)", yaxis_title="silhouette score")
-    charts.append(_spec(fig, "silhouette_by_k", "Choosing the number of groups", "line", 320))
-
-    ordered = sorted(c.clusters, key=lambda p: p.cluster)
-    fig = go.Figure(go.Bar(x=[f"Group {p.cluster}" for p in ordered], y=[p.size for p in ordered]))
-    fig.update_layout(yaxis_title="rows")
-    charts.append(_spec(fig, "cluster_sizes", "Rows in each group", "bar", 320))
-
-    if c.centers:
-        fig = px.imshow(
-            np.array(c.centers),
-            x=c.features,
-            y=[f"Group {i + 1}" for i in range(len(c.centers))],
-            color_continuous_scale="RdBu",
-            zmin=-2,
-            zmax=2,
-            text_auto=".1f",
-            aspect="auto",
-            labels={"color": "SD from avg"},
-        )
-        charts.append(_spec(fig, "cluster_profiles", "Group profiles (SD from the average)", "heatmap", 320))
-
-    if c.pca_explained:
-        components = [f"PC{i + 1}" for i in range(len(c.pca_explained))]
-        fig = go.Figure(go.Bar(x=components, y=[v * 100 for v in c.pca_explained], name="each"))
-        fig.add_trace(
-            go.Scatter(x=components, y=np.cumsum(c.pca_explained) * 100, mode="lines+markers", name="cumulative")
-        )
-        fig.update_layout(yaxis_title="% of variation", legend={"orientation": "h"})
-        charts.append(_spec(fig, "pca_variance", "Variation captured by each component", "bar", 320))
-    if c.chart:
-        charts.append(c.chart)
-    return charts

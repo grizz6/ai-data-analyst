@@ -1,8 +1,9 @@
-"""Which analyses fit this file, and which of them serve a stated goal.
+"""What this dataset could be used for next, and which of that serves a stated goal.
 
-`recommend` reads the finished analysis and lists the analyses worth running,
-each with the reason taken from the data ("churned is binary, 35% Yes;
-tenure_months differs most") and where in the app to run it.
+The app explores data; it doesn't run these analyses. `recommend` reads the
+finished exploration and lists the analyses the data supports, each with the
+reason taken from the data ("churned is yes/no, 35% Yes; tenure_months
+differs most"), what to check or fix first, and where in the exploration to look.
 
 `plan_for_goal` takes a business goal in plain words and orders a few of
 those analyses into a plan. A language model picks and explains the steps
@@ -40,6 +41,8 @@ MAX_GROUP_COMPARISONS = 3
 # Past the first series, one without this much trend or seasonality ranks low.
 MIN_SERIES_STRENGTH = 0.3
 MAX_PLAN_STEPS = 5
+MAX_CHECKS = 3
+MIN_SEGMENT_ROWS = 50
 MIN_PLAN_STEPS = 3
 MAX_GOAL_CHARS = 1_000
 SIGNIFICANT = 0.05
@@ -60,8 +63,9 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                 f"{len(serious)} issue{'s' if len(serious) != 1 else ''} to check before trusting any result, "
                 f"starting with: {serious[0].message}",
                 [q.column for q in serious if q.column][:5],
-                RecommendationAction(tab="quality", label="Open Data quality"),
+                RecommendationAction(tab="quality", label="See data quality"),
                 90,
+                [q.message for q in serious[1:4]],
             )
         )
 
@@ -80,8 +84,9 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                     f"errors ({values}); with every outlier its mean is {v.outliers.mean_all:,.4g}, "
                     f"without them {v.outliers.mean_without:,.4g}.",
                     [v.name],
-                    RecommendationAction(tab="variables", column=v.name, label=f"Open {v.name}"),
+                    RecommendationAction(tab="variables", column=v.name, label=f"See {v.name}"),
                     85,
+                    ["Confirm or correct each value in the outlier table, then decide to drop, cap or keep them."],
                 )
             )
 
@@ -95,8 +100,15 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
         if top is not None and real:
             why += f"; {top.column} differs most between the two groups ({top.detail})"
         else:
-            why += "; no other column differs clearly between its two groups"
-        why += ". Logistic regression and the other classifiers predict it and show which columns drive it."
+            why += "; no other column differs clearly between its two groups yet"
+        why += ". Logistic regression or another classifier would estimate each row's chance and what drives it."
+        checks = []
+        minority = min(v.binary.positive_share, 100 - v.binary.positive_share)
+        if minority < 20:
+            checks.append(
+                f"The smaller group is only {minority:g}% of rows: judge models by recall and AUC, not accuracy."
+            )
+        checks += _input_checks(result, exclude=v.name)
         score = (70 + 20 * abs(top.effect) if real and top else 45) + (10 if v.name in targets else 0)
         recs.append(
             _rec(
@@ -105,8 +117,9 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                 f"Predict {v.name} (yes/no)",
                 why,
                 [v.name] + ([top.column] if top else []),
-                RecommendationAction(tab="models", target=v.name, label=f"Train models on {v.name}"),
+                RecommendationAction(tab="variables", column=v.name, label=f"See {v.name}"),
                 score,
+                checks,
             )
         )
 
@@ -116,17 +129,23 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
         parts = [f"{ts.points} {ts.frequency} periods of {ts.column} along {ts.date_column}"]
         if ts.seasonal_strength is not None and ts.seasonal_strength >= 0.4:
             parts.append(f"a repeating pattern every {ts.seasonal_period} periods")
-        if ts.forecast:
-            parts.append(f"a {len(ts.forecast)}-period forecast")
+        checks = []
+        if ts.filled_gaps:
+            checks.append(f"{ts.filled_gaps} periods have no data; decide how to fill them before forecasting.")
+        if ts.stationary is False:
+            checks.append("Its level drifts (not stationary): difference it or model the trend first.")
+        if ts.points < 24:
+            checks.append(f"Only {ts.points} periods: too short for a reliable seasonal forecast.")
         recs.append(
             _rec(
                 f"time_series:{ts.column}",
                 "time_series",
-                f"Track and forecast {ts.column} over time",
-                ", ".join(parts) + ".",
+                f"Forecast {ts.column}",
+                ", ".join(parts) + ". A forecasting model (exponential smoothing or ARIMA) could project it forward.",
                 [ts.column, ts.date_column],
-                RecommendationAction(tab="time-series", label="Open Time series"),
+                RecommendationAction(tab="time", label="See it over time"),
                 score,
+                checks,
             )
         )
 
@@ -144,7 +163,13 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
             why = f"{t.column} is numeric"
             if partner:
                 why += f"; its strongest link is {partner[0]} (r = {partner[1]:.2f})"
-            why += ". Linear regression and tree models estimate it and rank what drives it."
+            why += ". Linear regression or tree models would estimate it and rank what drives it."
+            checks = []
+            if profile.skewness is not None and abs(profile.skewness) >= 1:
+                checks.append(f"{t.column} is skewed ({profile.skewness:.2f}): try a log scale for linear regression.")
+            if profile.outliers and profile.outliers.iqr_count:
+                checks.append(f"{profile.outliers.iqr_count} outliers in {t.column} would pull a linear fit.")
+            checks += _input_checks(result, exclude=t.column)
             recs.append(
                 _rec(
                     f"regression:{t.column}",
@@ -152,39 +177,51 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                     f"Explain and predict {t.column}",
                     why,
                     [t.column] + ([partner[0]] if partner else []),
-                    RecommendationAction(tab="models", target=t.column, label=f"Train models on {t.column}"),
+                    RecommendationAction(tab="variables", column=t.column, label=f"See {t.column}"),
                     60 + 20 * (abs(partner[1]) if partner else 0),
+                    checks,
                 )
             )
         elif profile.kind == "category":
+            smallest = min(profile.categories, key=lambda c: c.share) if profile.categories else None
+            checks = []
+            if smallest and smallest.share < 5:
+                checks.append(f"The rarest class, '{smallest.value}', is {smallest.share:g}% of rows.")
             recs.append(
                 _rec(
                     f"classification:{t.column}",
                     "classification",
                     f"Predict {t.column} ({profile.distinct} classes)",
-                    f"{t.column} has {profile.distinct} categories; classifiers predict which one a row belongs to.",
+                    f"{t.column} has {profile.distinct} categories; a classifier would predict which one a row "
+                    "belongs to.",
                     [t.column],
-                    RecommendationAction(tab="models", target=t.column, label=f"Train models on {t.column}"),
+                    RecommendationAction(tab="variables", column=t.column, label=f"See {t.column}"),
                     50,
+                    checks + _input_checks(result, exclude=t.column),
                 )
             )
 
-    if result.clustering:
-        c = result.clustering
-        why = (
-            f"The rows fall into {c.k} distinct groups (silhouette {c.silhouette:.2f}); profile each group."
-            if c.clear
-            else f"No clear groups (best silhouette {c.silhouette:.2f}): segments would be arbitrary cut-offs."
-        )
+    numeric = [v for v in result.variables if v.kind == "number"]
+    if len(numeric) >= 3 and result.row_count >= MIN_SEGMENT_ROWS:
+        names = [v.name for v in numeric[:5]]
+        spans = [v.max - v.min for v in numeric if v.max is not None and v.min is not None]
+        checks = []
+        if spans and min(spans) > 0 and max(spans) / min(spans) >= 10:
+            checks.append("The columns are on very different scales: standardize them first.")
+        skewed_names = [v.name for v in numeric if v.skewness is not None and abs(v.skewness) >= 1]
+        if skewed_names:
+            checks.append(f"Skewed columns ({', '.join(skewed_names[:3])}) can dominate distances; consider logs.")
         recs.append(
             _rec(
+                "segmentation",
                 "clustering",
-                "clustering",
-                "Segment the rows into groups" if c.clear else "Segmentation: no natural groups",
-                why,
-                c.features[:5],
-                RecommendationAction(tab="clustering", label="Open Clustering"),
-                65 if c.clear else 25,
+                "Look for segments (clustering)",
+                f"{len(numeric)} numeric columns ({', '.join(names)}) could define groups of similar rows, "
+                "for example with k-means.",
+                names,
+                RecommendationAction(tab="relationships", label="See relationships"),
+                40,
+                checks,
             )
         )
 
@@ -198,8 +235,9 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                 f"{g.group_column} explains {g.eta_squared:.0%} of the variation in {g.value_column}: "
                 f"highest in {g.highest_group}, lowest in {g.lowest_group}.",
                 [g.group_column, g.value_column],
-                RecommendationAction(tab="relationships", label="Open Relationships"),
+                RecommendationAction(tab="relationships", label="See relationships"),
                 50 + 40 * g.eta_squared,
+                ["An ANOVA or Kruskal-Wallis test confirms it; check each group has enough rows."],
             )
         )
 
@@ -212,8 +250,9 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                 f"Look at how {pair.column_a} and {pair.column_b} move together",
                 f"The strongest link in the file: r = {pair.correlation:.2f} over {pair.n} rows.",
                 [pair.column_a, pair.column_b],
-                RecommendationAction(tab="relationships", label="Open Relationships"),
+                RecommendationAction(tab="relationships", label="See relationships"),
                 45 + 30 * abs(pair.correlation),
+                ["Correlation isn't cause: look at the scatter plot for curves, clusters or outliers driving it."],
             )
         )
 
@@ -225,10 +264,11 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
                 "distribution",
                 f"Mind the shape of {v.name}",
                 f"{v.name} is skewed (skewness {v.skewness:.2f}): report its median ({v.median:,.4g}) rather than its "
-                f"mean ({v.mean:,.4g}), and consider a log scale before a linear regression.",
+                f"mean ({v.mean:,.4g}).",
                 [v.name],
-                RecommendationAction(tab="variables", column=v.name, label=f"Open {v.name}"),
+                RecommendationAction(tab="variables", column=v.name, label=f"See {v.name}"),
                 40,
+                ["Use a log scale (or a rank-based method) before any linear model."],
             )
         )
 
@@ -244,10 +284,37 @@ def _rec(
     columns: list[str],
     action: RecommendationAction,
     score: float,
+    check_first: list[str] | None = None,
 ) -> Recommendation:
     return Recommendation(
-        id=rec_id, analysis=analysis, title=title, why=why, columns=columns, action=action, score=round(score, 2)
+        id=rec_id,
+        analysis=analysis,
+        title=title,
+        why=why,
+        columns=columns,
+        action=action,
+        score=round(score, 2),
+        check_first=(check_first or [])[:MAX_CHECKS],
     )
+
+
+def _input_checks(result: AnalysisResult, exclude: str) -> list[str]:
+    """What to sort out in the other columns before using them to explain or predict one."""
+    checks = []
+    gappy = [v for v in result.variables if v.name != exclude and v.missing_share >= 5 and v.kind != "identifier"]
+    if gappy:
+        listed = ", ".join(f"{v.name} ({v.missing_share:g}%)" for v in gappy[:3])
+        checks.append(f"Missing values to handle: {listed}.")
+    twins = [
+        c for c in result.correlations if abs(c.correlation) >= 0.8 and exclude not in (c.column_a, c.column_b)
+    ]
+    if twins:
+        c = twins[0]
+        checks.append(
+            f"{c.column_a} and {c.column_b} carry nearly the same information (r = {c.correlation:.2f}); "
+            "use one of them."
+        )
+    return checks
 
 
 def _strongest_correlations(result: AnalysisResult) -> dict[str, tuple[str, float]]:
@@ -287,8 +354,8 @@ GOAL_KEYWORDS: dict[str, tuple[str, ...]] = {
 
 PLAN_SYSTEM_PROMPT = f"""\
 You turn a business goal into a short plan of analyses on one dataset. An automated
-analysis has already run; you are given its results ("facts") and a list of analyses the
-app can run on this file ("options"), each with an id and the reason it fits.
+exploration has already run; you are given its results ("facts") and a list of analyses
+this data supports ("options"), each with an id, the reason it fits and what to check first.
 
 {explanation.GROUND_RULES}
 
@@ -323,7 +390,7 @@ def rule_plan(
     chosen = chosen[:MAX_PLAN_STEPS]
     # Fixing the data comes first whenever it made the plan.
     chosen.sort(key=lambda r: 0 if r.analysis in ("data_quality", "outliers") else 1)
-    steps = [PlanStep(id=r.id, title=r.title, why=r.why, action=r.action) for r in chosen]
+    steps = [PlanStep(id=r.id, title=r.title, why=r.why, action=r.action, check_first=r.check_first) for r in chosen]
     return PlanResponse(
         goal=goal, steps=steps, note=note, configured=configured, source="rule_based", fallback_reason=reason
     )
@@ -363,7 +430,7 @@ async def plan_for_goal(result: AnalysisResult, goal: str, client: LLMClient | N
         rec = by_id.get(step.id)
         if rec is None or any(s.id == rec.id for s in steps):
             continue
-        steps.append(PlanStep(id=rec.id, title=rec.title, why=step.why, action=rec.action))
+        steps.append(PlanStep(id=rec.id, title=rec.title, why=step.why, action=rec.action, check_first=rec.check_first))
     if not steps:
         return _plan_fallback(result, goal, "model chose no analysis the app can run")
     steps = steps[:MAX_PLAN_STEPS]

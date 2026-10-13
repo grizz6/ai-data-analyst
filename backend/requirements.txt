@@ -14,4 +14,3 @@ pydantic-settings==2.15.0
 scipy==1.14.1
 httpx==0.28.1
 statsmodels==0.15.0
-scikit-learn==1.9.1

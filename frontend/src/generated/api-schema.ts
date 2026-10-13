@@ -130,20 +130,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/model": {
+    "/api/sessions/{session_id}/dictionary.csv": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Predict Column
-         * @description Compare models that predict one column from the others: held-out test set plus cross-validation.
+         * Download Dictionary
+         * @description One row per column: type, completeness, range, most common value and notes.
          */
-        post: operations["predict_column_api_sessions__session_id__model_post"];
+        get: operations["download_dictionary_api_sessions__session_id__dictionary_csv_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -212,6 +212,8 @@ export interface components {
         AnalysisResult: {
             /** Available Sheets */
             available_sheets: string[];
+            /** Breakdowns */
+            breakdowns: components["schemas"]["CategoryBreakdown"][];
             /** Categorical Summaries */
             categorical_summaries: components["schemas"]["CategoricalSummary"][];
             /** Charts */
@@ -224,16 +226,20 @@ export interface components {
             }[];
             /** Cleaning Actions */
             cleaning_actions: components["schemas"]["CleaningAction"][];
-            clustering: components["schemas"]["ClusterAnalysis"] | null;
             /** Column Count */
             column_count: number;
             /** Columns */
             columns: components["schemas"]["ColumnProfile"][];
             /** Correlations */
             correlations: components["schemas"]["CorrelationPair"][];
+            /** Crosstabs */
+            crosstabs: components["schemas"]["CategoryCrosstab"][];
+            duplicates: components["schemas"]["Duplicates"] | null;
             explanation: components["schemas"]["Explanation"];
             /** Filename */
             filename: string;
+            /** Missing Dependencies */
+            missing_dependencies: components["schemas"]["MissingDependency"][];
             /** Model Targets */
             model_targets: components["schemas"]["TargetSuggestion"][];
             /** Numeric Summaries */
@@ -375,6 +381,22 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * CategoryBreakdown
+         * @description A numeric column within each group of a category column.
+         */
+        CategoryBreakdown: {
+            /** Category */
+            category: string;
+            /** Eta Squared */
+            eta_squared: number;
+            /** Groups */
+            groups: components["schemas"]["GroupBox"][];
+            /** P Value */
+            p_value: number | null;
+            /** Value */
+            value: string;
+        };
         /** CategoryCount */
         CategoryCount: {
             /** Count */
@@ -383,6 +405,26 @@ export interface components {
             share: number;
             /** Value */
             value: string;
+        };
+        /**
+         * CategoryCrosstab
+         * @description Counts of rows for each pair of values of two category columns.
+         */
+        CategoryCrosstab: {
+            /** Column */
+            column: string;
+            /** Column Labels */
+            column_labels: string[];
+            /** Counts */
+            counts: number[][];
+            /** Cramers V */
+            cramers_v: number;
+            /** P Value */
+            p_value: number | null;
+            /** Row */
+            row: string;
+            /** Row Labels */
+            row_labels: string[];
         };
         /** ChartSpec */
         ChartSpec: {
@@ -427,41 +469,6 @@ export interface components {
             description: string;
             /** Rows Affected */
             rows_affected: number | null;
-        };
-        /** ClusterAnalysis */
-        ClusterAnalysis: {
-            /** Centers */
-            centers: number[][];
-            chart: components["schemas"]["ChartSpec"] | null;
-            /** Clear */
-            clear: boolean;
-            /** Clusters */
-            clusters: components["schemas"]["ClusterProfile"][];
-            /** Features */
-            features: string[];
-            /** K */
-            k: number;
-            /** K Scores */
-            k_scores: number[];
-            /** Pca Explained */
-            pca_explained: number[];
-            /** Rows Used */
-            rows_used: number;
-            /** Silhouette */
-            silhouette: number;
-            /** Summary */
-            summary: string;
-        };
-        /** ClusterProfile */
-        ClusterProfile: {
-            /** Cluster */
-            cluster: number;
-            /** Distinctive */
-            distinctive: {
-                [key: string]: unknown;
-            }[];
-            /** Size */
-            size: number;
         };
         /** ColumnProfile */
         ColumnProfile: {
@@ -550,6 +557,27 @@ export interface components {
             /** Zscore Outliers */
             zscore_outliers: number;
         };
+        /**
+         * DuplicateGroup
+         * @description Rows that are exact copies of each other, numbered from 1 as in the file.
+         */
+        DuplicateGroup: {
+            /** Rows */
+            rows: number[];
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /** Duplicates */
+        Duplicates: {
+            /** Count */
+            count: number;
+            /** Groups */
+            groups: components["schemas"]["DuplicateGroup"][];
+            /** Share */
+            share: number;
+        };
         /** Explanation */
         Explanation: {
             /** Analysis Summary */
@@ -577,26 +605,6 @@ export interface components {
              * @enum {string}
              */
             source: "rule_based" | "llm";
-        };
-        /** FeatureImportance */
-        FeatureImportance: {
-            /** Feature */
-            feature: string;
-            /** Importance */
-            importance: number;
-            /** Spread */
-            spread: number;
-        };
-        /** ForecastPoint */
-        ForecastPoint: {
-            /** Date */
-            date: string;
-            /** Lower */
-            lower: number;
-            /** Upper */
-            upper: number;
-            /** Value */
-            value: number;
         };
         /** GroupBox */
         GroupBox: {
@@ -647,6 +655,20 @@ export interface components {
             /** Edges */
             edges: number[];
         };
+        /**
+         * MissingDependency
+         * @description Whether a column's gaps are random or depend on other columns.
+         */
+        MissingDependency: {
+            /** Column */
+            column: string;
+            /** Missing */
+            missing: number;
+            /** Missing Share */
+            missing_share: number;
+            /** Related */
+            related: components["schemas"]["BinaryComparison"][];
+        };
         /** MissingPattern */
         MissingPattern: {
             /** Both Missing */
@@ -657,78 +679,6 @@ export interface components {
             column_b: string;
             /** Correlation */
             correlation: number;
-        };
-        /** ModelReport */
-        ModelReport: {
-            /** Beats Baseline */
-            beats_baseline: boolean;
-            /** Best Model */
-            best_model: string;
-            /** Best Test Metrics */
-            best_test_metrics: {
-                [key: string]: number;
-            };
-            /** Charts */
-            charts: components["schemas"]["ChartSpec"][];
-            /** Dropped Features */
-            dropped_features: string[];
-            /** Features */
-            features: string[];
-            /** Folds */
-            folds: number;
-            /** Importances */
-            importances: components["schemas"]["FeatureImportance"][];
-            /** Notes */
-            notes: string[];
-            /** Primary Metric */
-            primary_metric: string;
-            /** Rows Used */
-            rows_used: number;
-            /** Scores */
-            scores: components["schemas"]["ModelScore"][];
-            /** Secondary Metric */
-            secondary_metric: string;
-            /** Summary */
-            summary: string;
-            /** Target */
-            target: string;
-            /**
-             * Task
-             * @enum {string}
-             */
-            task: "classification" | "regression";
-            /** Test Rows */
-            test_rows: number;
-            /** Train Rows */
-            train_rows: number;
-        };
-        /** ModelRequest */
-        ModelRequest: {
-            /** Target */
-            target: string;
-        };
-        /** ModelScore */
-        ModelScore: {
-            /** Cv Mean */
-            cv_mean: number;
-            /** Cv Std */
-            cv_std: number;
-            /** Family */
-            family: string;
-            /** Fit Seconds */
-            fit_seconds: number;
-            /** Name */
-            name: string;
-            /** Overfit */
-            overfit: boolean;
-            /** Test Auc */
-            test_auc: number | null;
-            /** Test Score */
-            test_score: number;
-            /** Test Secondary */
-            test_secondary: number;
-            /** Train Score */
-            train_score: number;
         };
         /** NumericSummary */
         NumericSummary: {
@@ -842,6 +792,8 @@ export interface components {
         /** PlanStep */
         PlanStep: {
             action: components["schemas"]["RecommendationAction"];
+            /** Check First */
+            check_first: string[];
             /** Id */
             id: string;
             /** Title */
@@ -913,6 +865,8 @@ export interface components {
             action: components["schemas"]["RecommendationAction"];
             /** Analysis */
             analysis: string;
+            /** Check First */
+            check_first: string[];
             /** Columns */
             columns: string[];
             /** Id */
@@ -927,7 +881,10 @@ export interface components {
             /** Why */
             why: string;
         };
-        /** RecommendationAction */
+        /**
+         * RecommendationAction
+         * @description Where in the exploration to look: a tab, and a column to open there.
+         */
         RecommendationAction: {
             /** Column */
             column: string | null;
@@ -935,8 +892,6 @@ export interface components {
             label: string;
             /** Tab */
             tab: string;
-            /** Target */
-            target: string | null;
         };
         /** RuleInsight */
         RuleInsight: {
@@ -1000,10 +955,6 @@ export interface components {
             date_column: string;
             /** Filled Gaps */
             filled_gaps: number;
-            /** Forecast */
-            forecast: components["schemas"]["ForecastPoint"][];
-            /** Forecast Method */
-            forecast_method: string;
             /** Frequency */
             frequency: string;
             /** Points */
@@ -1337,7 +1288,7 @@ export interface operations {
             };
         };
     };
-    predict_column_api_sessions__session_id__model_post: {
+    download_dictionary_api_sessions__session_id__dictionary_csv_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1346,11 +1297,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1358,7 +1305,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ModelReport"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

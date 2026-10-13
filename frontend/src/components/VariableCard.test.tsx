@@ -1,5 +1,4 @@
 import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { VariableProfile } from "../types";
 import VariableCard from "./VariableCard";
@@ -76,8 +75,7 @@ describe("VariableCard", () => {
     expect(screen.getByText(/Zoomed to 0 – 70: 1 far-out value/)).toBeInTheDocument();
   });
 
-  it("ranks what differs between a yes/no column's groups and offers to model it", async () => {
-    const onTrain = vi.fn();
+  it("ranks what differs between a yes/no column's groups", () => {
     const churned: VariableProfile = {
       ...numberVariable(),
       name: "churned",
@@ -94,13 +92,11 @@ describe("VariableCard", () => {
         { column: "plan", kind: "category", effect: 0.02, effect_name: "Cramér's V", p_value: 0.9, detail: "" },
       ],
     };
-    render(<VariableCard variable={churned} onTrain={onTrain} />);
+    render(<VariableCard variable={churned} />);
 
     expect(screen.getByText("65% No / 35% Yes · differs most by tenure")).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Compared against churned" });
     expect(within(within(table).getByText("tenure").closest("tr")!).getByText("likely real")).toBeInTheDocument();
     expect(within(within(table).getByText("plan").closest("tr")!).getByText("could be chance")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Train models on churned" }));
-    expect(onTrain).toHaveBeenCalledWith("churned");
   });
 });

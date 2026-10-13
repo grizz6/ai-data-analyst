@@ -10,25 +10,22 @@ def daily(values, start="2023-01-01") -> pd.DataFrame:
     return pd.DataFrame({"day": pd.date_range(start, periods=len(values), freq="D"), "v": values})
 
 
-def test_weekly_cycle_in_daily_data_is_found_and_forecast():
+def test_weekly_cycle_in_daily_data_is_found():
     n = 140
     weekly = 10 * np.sin(2 * np.pi * np.arange(n) / 7)
     (ts,) = analyze_time_series(daily(100 + weekly + rng.normal(0, 1, n)))
 
     assert (ts.frequency, ts.points, ts.seasonal_period) == ("daily", n, 7)
     assert ts.seasonal_strength > 0.8
-    assert ts.forecast_method.startswith("Holt-Winters")
-    assert len(ts.forecast) == 7
     assert [c.id for c in ts.charts] == ["ts_v", "ts_acf_v", "ts_decomp_v"]
     assert "strong repeating pattern every 7 periods" in ts.summary
 
 
-def test_forecast_band_contains_the_forecast_and_widens():
+def test_it_describes_the_past_without_forecasting():
     (ts,) = analyze_time_series(daily(np.arange(60, dtype=float) + rng.normal(0, 2, 60)))
-    assert all(p.lower < p.value < p.upper for p in ts.forecast)
-    widths = [p.upper - p.lower for p in ts.forecast]
-    assert widths == sorted(widths) and widths[-1] > widths[0]
-    assert ts.forecast[0].value > 55  # carries the upward trend on
+    assert "forecast" not in ts.model_dump()
+    assert ts.charts[0].title == "v over time"
+    assert "projection" not in ts.summary
 
 
 def test_stationarity_white_noise_versus_random_walk():
@@ -94,4 +91,4 @@ def test_report_shows_time_series_with_their_charts(client, sample_csv_bytes):
     upload = client.post("/api/upload", files={"file": ("s.csv", sample_csv_bytes, "text/csv")})
     html = client.get(f"/api/sessions/{upload.json()['session_id']}/report").text
     assert "<h2>Time series</h2>" in html
-    assert "sales: history and forecast" in html
+    assert "sales over time" in html

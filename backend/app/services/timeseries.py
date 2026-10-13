@@ -2,10 +2,8 @@
 
 Values are averaged into regular periods (daily, weekly, monthly, quarterly
 or yearly, chosen from how far apart the dates are), then tested for
-stationarity (ADF), autocorrelation, trend and seasonal strength
-(classical decomposition), and projected forward with exponential smoothing
-(Holt-Winters). The forecast band is approximate: it widens with the
-horizon from the model's in-sample error.
+stationarity (ADF), autocorrelation, and trend and seasonal strength
+(classical decomposition). This describes the past; it doesn't forecast.
 """
 
 import math
@@ -16,7 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from app.models.schemas import ChartSpec, ForecastPoint, TimeSeriesAnalysis
+from app.models.schemas import ChartSpec, TimeSeriesAnalysis
 from app.services.analysis import format_p
 from app.services.timeaxis import TimeAxis, find_time_axis
 from app.utils.json_compat import plotly_figure_to_dict
@@ -85,10 +83,7 @@ def _analyze_calendar(frame: pd.DataFrame, axis_label: str, col: str) -> TimeSer
         return None
     seasonal_period = season if season and len(series) >= 2 * season else None
 
-    def future(horizon: int) -> list[str]:
-        return [d.date().isoformat() for d in pd.date_range(series.index[-1], periods=horizon + 1, freq=freq)[1:]]
-
-    return _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps, future)
+    return _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps)
 
 
 def _analyze_steps(frame: pd.DataFrame, axis_label: str, col: str) -> TimeSeriesAnalysis | None:
@@ -107,24 +102,15 @@ def _analyze_steps(frame: pd.DataFrame, axis_label: str, col: str) -> TimeSeries
     # Without a calendar, a repeating pattern is read from the autocorrelation itself.
     seasonal_period = _repeat_length(series)
     window = max(3, min(20, len(series) // 20))
-    step = float(np.median(np.diff(series.index.to_numpy(dtype=float)))) or 1.0
-    last = float(series.index[-1])
-
-    def future(horizon: int) -> list[str]:
-        return [f"{last + h * step:g}" for h in range(1, horizon + 1)]
-
-    return _finish(series, col, axis_label, label, window, seasonal_period, 0, future)
+    return _finish(series, col, axis_label, label, window, seasonal_period, 0)
 
 
-def _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps, future) -> TimeSeriesAnalysis:
+def _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps) -> TimeSeriesAnalysis:
     adf_stat, adf_p = _adf(series)
     lag, lag_acf = _strongest_lag(series, seasonal_period)
     seasonal_strength, trend_strength, decomposition = _decompose(series, seasonal_period)
-    horizon = max(1, min(seasonal_period or 6, len(series) // 4, 12))
-    method, forecast = _forecast(series, seasonal_period, horizon, future(horizon))
-
     rolling = series.rolling(window, min_periods=1).mean()
-    charts = [_forecast_chart(series, rolling, window, forecast, col, label, axis_label), _acf_chart(series, col)]
+    charts = [_history_chart(series, rolling, window, col, label, axis_label), _acf_chart(series, col)]
     if decomposition is not None:
         charts.append(_decomposition_chart(decomposition, col))
 
@@ -143,8 +129,6 @@ def _finish(series, col, axis_label, label, window, seasonal_period, filled_gaps
         seasonal_period=seasonal_period,
         seasonal_strength=seasonal_strength,
         trend_strength=trend_strength,
-        forecast_method=method,
-        forecast=forecast,
         charts=charts,
         summary="",
     )
@@ -220,64 +204,14 @@ def _decompose(series: pd.Series, period: int | None):
     return round(float(seasonal_strength), 4), round(float(trend_strength), 4), parts
 
 
-def _forecast(
-    series: pd.Series, period: int | None, horizon: int, labels: list[str]
-) -> tuple[str, list[ForecastPoint]]:
-    from statsmodels.tsa.holtwinters import ExponentialSmoothing
-
-    seasonal = "add" if period else None
-    method = "Holt-Winters exponential smoothing (trend and seasonality)" if period else "Holt's linear trend"
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            fit = ExponentialSmoothing(
-                series.to_numpy(), trend="add", damped_trend=True, seasonal=seasonal, seasonal_periods=period
-            ).fit()
-            values = fit.forecast(horizon)
-    except (ValueError, np.linalg.LinAlgError):
-        return "not enough data to forecast", []
-    sigma = float(np.std(series.to_numpy() - fit.fittedvalues, ddof=1))
-    return method, [
-        ForecastPoint(
-            date=d,
-            value=round(float(v), 4),
-            lower=round(float(v - Z_95 * sigma * math.sqrt(h)), 4),
-            upper=round(float(v + Z_95 * sigma * math.sqrt(h)), 4),
-        )
-        for h, (d, v) in enumerate(zip(labels, values, strict=True), start=1)
-    ]
-
-
-def _forecast_chart(series, rolling, window, forecast, col, label, axis_label) -> ChartSpec:
+def _history_chart(series, rolling, window, col, label, axis_label) -> ChartSpec:
     fig = go.Figure()
     markers = "lines+markers" if len(series) <= 120 else "lines"
     fig.add_trace(go.Scatter(x=series.index, y=series.values, name=f"{label} average", mode=markers))
     fig.add_trace(go.Scatter(x=rolling.index, y=rolling.values, name=f"{window}-period rolling mean", mode="lines"))
-    if forecast:
-        xs = [p.date for p in forecast]
-        fig.add_trace(
-            go.Scatter(
-                x=xs, y=[p.upper for p in forecast], mode="lines", line={"width": 0}, showlegend=False, hoverinfo="skip"
-            )
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=xs,
-                y=[p.lower for p in forecast],
-                mode="lines",
-                line={"width": 0},
-                fill="tonexty",
-                name="approx. 95% range",
-                hoverinfo="skip",
-            )
-        )
-        fig.add_trace(
-            go.Scatter(x=xs, y=[p.value for p in forecast], name="forecast", mode="lines", line={"dash": "dash"})
-        )
-    fig.update_layout(title=f"{col}: history and forecast", legend={"orientation": "h"}, xaxis_title=axis_label)
-    return ChartSpec(
-        id=f"ts_{col}", title=f"{col}: history and forecast", chart_type="line", plotly_json=plotly_figure_to_dict(fig)
-    )
+    fig.update_layout(title=f"{col} over time", legend={"orientation": "h"}, xaxis_title=axis_label)
+    title = f"{col} over time"
+    return ChartSpec(id=f"ts_{col}", title=title, chart_type="line", plotly_json=plotly_figure_to_dict(fig))
 
 
 def _acf_chart(series: pd.Series, col: str) -> ChartSpec:
@@ -337,11 +271,5 @@ def _summary(a: TimeSeriesAnalysis) -> str:
         parts.append(
             f"Each value {direction} the one {a.strongest_lag} period(s) earlier "
             f"(autocorrelation {a.strongest_lag_acf:.2f})."
-        )
-    if a.forecast:
-        last = a.forecast[-1]
-        parts.append(
-            f"A {a.forecast_method} projection puts it near {last.value:,.2f} by {last.date} "
-            f"(roughly {last.lower:,.2f} to {last.upper:,.2f})."
         )
     return " ".join(parts)

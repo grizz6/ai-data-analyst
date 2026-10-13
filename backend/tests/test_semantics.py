@@ -89,3 +89,8 @@ def test_extremes_point_at_the_record_id(orders_result):
     highest = next(i for i in orders_result.rule_insights if i.title == "Highest amount")
     assert highest.message == "Maximum amount is 90.0 (order_id 1017)."
     assert any(i.title == "Identifier columns" for i in orders_result.rule_insights)
+
+
+def test_flags_named_like_ids_are_not_identifiers():
+    df = pd.DataFrame({"has_phone": [1, None, 1, 1], "order_id": [10, 11, 12, 13], "zip": ["A", "B", "C", "A"]})
+    assert identifier_columns(df) == ["order_id", "zip"]

@@ -33,14 +33,16 @@ def result():
     return compute_analysis(df.to_csv(index=False).encode(), "churn.csv")
 
 
-def test_recommendations_give_reasons_from_the_data_and_where_to_run_them(result):
+def test_next_steps_give_reasons_from_the_data_and_what_to_check_first(result):
     by_id = {r.id: r for r in result.recommendations}
     churn = by_id["logistic:churned"]
-    assert churn.action.tab == "models" and churn.action.target == "churned"
+    assert churn.action.tab == "variables" and churn.action.column == "churned"
     assert "tenure_months differs most" in churn.why
     suspicious = by_id["outliers:monthly_spend"]
     assert suspicious.action.tab == "variables" and suspicious.action.column == "monthly_spend"
-    assert "-50" in suspicious.why
+    assert "-50" in suspicious.why and suspicious.check_first
+    spend = by_id["regression:monthly_spend"]
+    assert any("skewed" in c for c in spend.check_first)
     assert [r.score for r in result.recommendations] == sorted((r.score for r in result.recommendations), reverse=True)
 
 
@@ -92,7 +94,9 @@ def test_model_plan_keeps_known_steps_in_its_order(result, configured):
     plan = plan_with(result, fake)
     assert plan.source == "llm" and plan.model == "test-model"
     assert [s.id for s in plan.steps] == ["outliers:monthly_spend", "logistic:churned"]
-    assert plan.steps[1].action.target == "churned"
+    assert plan.steps[1].action.column == "churned" and plan.steps[1].check_first == next(
+        r.check_first for r in result.recommendations if r.id == "logistic:churned"
+    )
     sent = json.loads(json.loads(fake.requests[0].content)["messages"][1]["content"])
     assert sent["goal"] == "reduce churn" and {o["id"] for o in sent["options"]} >= {"logistic:churned"}
 
@@ -112,3 +116,10 @@ def test_model_plan_with_only_unknown_steps_falls_back(result, configured):
 def test_plan_fallback_keeps_explanation_rules(result, configured, monkeypatch):
     # The plan reuses the explanation's ground rules, so the two can't drift apart.
     assert explanation.GROUND_RULES in advice.PLAN_SYSTEM_PROMPT
+
+
+def test_outcome_like_columns_are_suggested_first():
+    from app.services.targets import suggest_targets
+
+    df = pd.DataFrame({"a": rng.normal(size=60), "churned": ["yes", "no"] * 30, "b": rng.normal(size=60)})
+    assert [t.column for t in suggest_targets(df)][:2] == ["churned", "b"]

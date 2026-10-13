@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  clusteringTakeaway,
-  exploreTakeaway,
   overviewTakeaway,
   qualityTakeaway,
   relationshipsTakeaway,
@@ -25,18 +23,6 @@ describe("takeaways", () => {
     expect(qualityTakeaway(sampleResult({ quality_issues: [] }))).toBe("No quality issues found.");
   });
 
-  it("points out the most skewed column only when it is clearly skewed", () => {
-    const result = sampleResult();
-    const base = result.statistics.distributions[0];
-    result.statistics.distributions = [
-      { ...base, column: "a", skewness: 0.4, zscore_outliers: 0 },
-      { ...base, column: "b", skewness: -2.25, zscore_outliers: 3 },
-    ];
-    expect(exploreTakeaway(result)).toMatch(/most skewed: b \(-2\.3\) · 3 extreme values/);
-    result.statistics.distributions = [{ ...base, skewness: 0.4, zscore_outliers: 0 }];
-    expect(exploreTakeaway(result)).not.toMatch(/skewed|extreme/);
-  });
-
   it("leads with the strongest correlation, whatever its sign", () => {
     const result = sampleResult();
     const base = result.correlations[0];
@@ -49,16 +35,8 @@ describe("takeaways", () => {
     expect(relationshipsTakeaway(sampleResult({ correlations: [] }))).not.toMatch(/Strongest/);
   });
 
-  it("counts series, seasonal ones and forecasts", () => {
+  it("counts series and seasonal ones", () => {
     const result = sampleResult();
     expect(timeSeriesTakeaway(result)).toMatch(/^\d+ series over date/);
-  });
-
-  it("says plainly when there are no clear groups", () => {
-    const result = sampleResult();
-    expect(clusteringTakeaway(result)).toMatch(/^3 distinct groups \(silhouette 0\.87\) · largest \d+ rows$/);
-    result.clustering = { ...result.clustering!, clear: false, silhouette: 0.12 };
-    expect(clusteringTakeaway(result)).toBe("No clear groups (best silhouette 0.12, at 3 groups)");
-    expect(clusteringTakeaway(sampleResult({ clustering: null }))).toMatch(/needs at least two numeric columns/);
   });
 });

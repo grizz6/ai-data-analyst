@@ -13,6 +13,17 @@ const EXAMPLE_GOALS = [
   "Understand what drives revenue",
 ];
 
+function CheckFirst({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <ul className="check-first" aria-label="Check first">
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
 interface Props {
   sessionId: string;
   recommendations: Recommendation[];
@@ -47,7 +58,7 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
       <section className="stats-section" aria-label="Plan for a goal">
         <h3>
           What are you trying to achieve?{" "}
-          <Hint text="Describe the business goal in your own words. The plan uses only analyses this file supports, and every figure in it comes from the results." />
+          <Hint text="Describe the business goal in your own words. The plan picks from the analyses this data supports, and every figure in it comes from the exploration." />
         </h3>
         <div className="suggestions" aria-label="Example goals">
           {EXAMPLE_GOALS.map((g) => (
@@ -82,7 +93,7 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
           <div className="plan" aria-label="Plan">
             <p className="source-note">
               {plan.source === "llm"
-                ? `Plan by ${plan.model}, from the analyses this file supports.`
+                ? `Plan by ${plan.model}, from the analyses this data supports.`
                 : plan.fallback_reason
                   ? `Rule-based plan: the language model's plan wasn't used (${plan.fallback_reason}).`
                   : "Rule-based plan, matched on the goal's words and column names."}
@@ -94,6 +105,7 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
                   <div className="plan-step-text">
                     <strong>{step.title}</strong>
                     <span>{step.why}</span>
+                    <CheckFirst items={step.check_first} />
                   </div>
                   <button type="button" className="btn secondary small-btn" onClick={() => onAction(step.action)}>
                     {step.action.label}
@@ -105,10 +117,10 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
         )}
       </section>
 
-      <section className="stats-section" aria-label="What to run next">
+      <section className="stats-section" aria-label="What this data could be used for">
         <h3>
-          What to run next{" "}
-          <Hint text="Ranked by how strongly the data supports each analysis. Each reason is computed from this file." />
+          What this data could be used for{" "}
+          <Hint text="Analyses this data supports, ranked by how strongly the exploration backs them, each with what to check or fix first. The app explores; these are for you to run next." />
         </h3>
         {recommendations.length === 0 ? (
           <p className="muted">No analysis stands out for this file.</p>
@@ -119,6 +131,7 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
                 <div className="plan-step-text">
                   <strong>{rec.title}</strong>
                   <span>{rec.why}</span>
+                  <CheckFirst items={rec.check_first} />
                 </div>
                 <button type="button" className="btn secondary small-btn" onClick={() => onAction(rec.action)}>
                   {rec.action.label}

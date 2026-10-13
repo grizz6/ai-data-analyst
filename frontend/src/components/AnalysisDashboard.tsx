@@ -1,9 +1,7 @@
 import { lazy, Suspense, useRef, useState, type KeyboardEvent } from "react";
-import { askQuestion, cleanedCsvUrl, deleteSession, printableReportUrl, reportDownloadUrl } from "../api";
+import { askQuestion, cleanedCsvUrl, deleteSession, dictionaryUrl, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatNumber, formatP, friendlyType } from "../format";
 import {
-  clusteringTakeaway,
-  exploreTakeaway,
   overviewTakeaway,
   qualityTakeaway,
   relationshipsTakeaway,
@@ -16,13 +14,14 @@ import type { AnalysisResult, ChartSpec, ChatTurn, RecommendationAction } from "
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
 import ChartBuilder from "./ChartBuilder";
-import ClusteringPanel from "./ClusteringPanel";
 import DataTable from "./DataTable";
 import Hint from "./Hint";
-import MachineLearningPanel from "./MachineLearningPanel";
+import BreakdownExplorer from "./BreakdownExplorer";
+import QualityExtras from "./QualityExtras";
 import StatisticsPanel from "./StatisticsPanel";
 import SuggestionsPanel from "./SuggestionsPanel";
 import Tile from "./Tile";
+import { KIND_LABELS } from "./VariableCard";
 import TimeSeriesPanel from "./TimeSeriesPanel";
 import VariablesPanel from "./VariablesPanel";
 
@@ -49,19 +48,7 @@ const AXIS_KINDS: Record<string, string> = {
   row_order: "row order",
 };
 
-type TabId =
-  | "overview"
-  | "suggestions"
-  | "quality"
-  | "variables"
-  | "explore"
-  | "relationships"
-  | "time-series"
-  | "clustering"
-  | "models"
-  | "build"
-  | "ask"
-  | "data";
+type TabId = "overview" | "quality" | "variables" | "relationships" | "time" | "next" | "ask" | "build" | "data";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -153,16 +140,13 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const visuals = result.visuals ?? {};
   const tabs: [TabId, string][] = [
     ["overview", "Overview"],
-    ["suggestions", "Suggestions"],
     ["quality", "Data quality"],
     ["variables", "Variables"],
-    ["explore", "Explore"],
     ["relationships", "Relationships"],
-    ...(result.time_series.length > 0 ? [["time-series", "Time series"] as [TabId, string]] : []),
-    ["clustering", "Clustering"],
-    ["models", "Models"],
-    ["build", "Build a chart"],
+    ...(result.time_series.length > 0 ? [["time", "Over time"] as [TabId, string]] : []),
+    ["next", "Next steps"],
     ["ask", "Ask"],
+    ["build", "Build a chart"],
     ["data", "Data"],
   ];
   const [tab, setTab] = useState<TabId>(() => {
@@ -176,13 +160,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     window.history.replaceState(null, "", `#${id}`);
   };
   const [variable, setVariable] = useState<string | null>(null);
-  const [modelRequest, setModelRequest] = useState<{ target: string; nonce: number } | null>(null);
-  const train = (target: string) => {
-    setModelRequest((previous) => ({ target, nonce: (previous?.nonce ?? 0) + 1 }));
-    choose("models");
-  };
   const handleAction = (action: RecommendationAction) => {
-    if (action.target) return train(action.target);
     if (action.column) setVariable(action.column);
     if (tabs.some(([id]) => id === action.tab)) choose(action.tab as TabId);
   };
@@ -199,8 +177,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const asked = new Set(thread.map((t) => t.question));
   const suggestions = suggestedQuestions(result).filter((q) => !asked.has(q));
 
-  const kinds = result.columns.reduce<Record<string, number>>((acc, c) => {
-    const kind = c.is_identifier ? "Identifier" : friendlyType(c.dtype);
+  // The same column types as the Variables tab and the written summary.
+  const kinds = result.variables.reduce<Record<string, number>>((acc, v) => {
+    const kind = KIND_LABELS[v.kind];
     acc[kind] = (acc[kind] ?? 0) + 1;
     return acc;
   }, {});
@@ -208,8 +187,6 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
   const missingCells = result.columns.reduce((sum, c) => sum + c.null_count, 0);
   const missingPct = totalCells ? (missingCells / totalCells) * 100 : 0;
   const toCheck = result.quality_issues.filter((i) => i.severity === "error" || i.severity === "warning").length;
-  const skewed = result.statistics.distributions.filter((d) => Math.abs(d.skewness ?? 0) >= 1).length;
-  const extremes = result.statistics.distributions.reduce((sum, d) => sum + d.zscore_outliers, 0);
   const strongest = [...result.correlations].sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))[0];
   const realPairs = result.correlations.filter((c) => c.p_value !== null && c.p_value < 0.05).length;
   const realGroups = result.statistics.group_differences.filter((g) => g.p_adjusted !== null && g.p_adjusted < 0.05).length;
@@ -277,6 +254,9 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           >
             Save as PDF
           </a>
+          <a className="btn secondary" href={dictionaryUrl(result.session_id)} download>
+            Data dictionary
+          </a>
           <a className="btn secondary" href={cleanedCsvUrl(result.session_id)} download>
             Cleaned CSV
           </a>
@@ -324,49 +304,75 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             ))}
             <Tile label="Quality issues" value={String(result.quality_issues.length)} tone={toCheck ? "attention" : "good"} />
           </div>
-          <Charts charts={[...(visuals.overview ?? []), ...result.charts]} result={result} />
-          <details className="summary-details">
-            <summary>Summary and key findings</summary>
+          <div className="story" aria-label="What this dataset tells you">
+            <h3>What this dataset is</h3>
+            <p>{result.explanation.dataset_overview}</p>
+            <h3>What it tells you</h3>
+            <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
+            {result.explanation.recommendations.length > 0 && (
+              <>
+                <h3>Check before using it</h3>
+                <ul>
+                  {result.explanation.recommendations.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              </>
+            )}
             <p className="source-note">
               {result.explanation.source === "llm"
                 ? `Written by ${result.explanation.model} from the computed results; every number in it was checked.`
                 : result.explanation.configured && result.explanation.fallback_reason
                   ? `Rule-based: the language model's text wasn't used (${result.explanation.fallback_reason}).`
-                  : "Rule-based summary. Set an LLM API key on the server for a written explanation."}
+                  : "Rule-based summary, built from the computed results."}
             </p>
-            <p>{result.explanation.dataset_overview}</p>
-            <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation.analysis_summary}</p>
-            {result.rule_insights.length > 0 && (
-              <>
-                <h4>Key findings</h4>
-                <ul className="insight-list">
-                  {result.rule_insights.map((insight, i) => (
-                    <li key={i}>
-                      <strong>{insight.title}:</strong> {insight.message}
-                    </li>
+          </div>
+          <h3>At a glance</h3>
+          <Charts charts={[...(visuals.overview ?? []), ...(visuals.explore ?? [])]} result={result} />
+          {result.numeric_summaries.length > 0 && (
+            <div className="scroll-table">
+              <table className="data" aria-label="Numeric statistics">
+                <thead>
+                  <tr>
+                    <th>Column</th>
+                    <th className="num">Mean</th>
+                    <th className="num">Median</th>
+                    <th className="num">Std dev</th>
+                    <th className="num">Min</th>
+                    <th className="num">25%</th>
+                    <th className="num">75%</th>
+                    <th className="num">Max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.numeric_summaries.map((s) => (
+                    <tr key={s.column}>
+                      <td>{s.column}</td>
+                      <td className="num">{formatNumber(s.mean)}</td>
+                      <td className="num">{formatNumber(s.median)}</td>
+                      <td className="num">{formatNumber(s.std)}</td>
+                      <td className="num">{formatNumber(s.min)}</td>
+                      <td className="num">{formatNumber(s.q25)}</td>
+                      <td className="num">{formatNumber(s.q75)}</td>
+                      <td className="num">{formatNumber(s.max)}</td>
+                    </tr>
                   ))}
-                </ul>
-              </>
-            )}
-            {result.explanation.recommendations.length > 0 && (
-              <ul>
-                {result.explanation.recommendations.map((r, i) => (
-                  <li key={i}>{r}</li>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {result.rule_insights.length > 0 && (
+            <details className="summary-details">
+              <summary>All findings</summary>
+              <ul className="insight-list">
+                {result.rule_insights.map((insight, i) => (
+                  <li key={i}>
+                    <strong>{insight.title}:</strong> {insight.message}
+                  </li>
                 ))}
               </ul>
-            )}
-          </details>
-        </section>
-      )}
-
-      {tab === "suggestions" && (
-        <section {...panelProps("suggestions")}>
-          <p className="takeaway">{suggestionsTakeaway(result)}</p>
-          <SuggestionsPanel
-            sessionId={result.session_id}
-            recommendations={result.recommendations}
-            onAction={handleAction}
-          />
+            </details>
+          )}
         </section>
       )}
 
@@ -380,6 +386,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             <Tile label="Cleaning steps" value={String(result.cleaning_actions.length)} />
           </div>
           <Charts charts={visuals.quality ?? []} />
+          <QualityExtras duplicates={result.duplicates} missing={result.missing_dependencies} />
           <div className="grid-2">
             <div>
               <h3>Issues</h3>
@@ -420,52 +427,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
       {tab === "variables" && (
         <section {...panelProps("variables")}>
           <p className="takeaway">{variablesTakeaway(result)}</p>
-          <VariablesPanel variables={result.variables} selected={variable} onSelect={setVariable} onTrain={train} />
-        </section>
-      )}
-
-      {tab === "explore" && (
-        <section {...panelProps("explore")}>
-          <p className="takeaway">{exploreTakeaway(result)}</p>
-          <div className="stats">
-            <Tile label="Numeric columns" value={String(result.numeric_summaries.length)} />
-            <Tile label="Category columns" value={String(result.categorical_summaries.length)} />
-            <Tile label="Skewed" value={String(skewed)} hint="Columns with skewness of 1 or more either way" />
-            <Tile label="Extreme values" value={extremes.toLocaleString()} hint="Values more than 3 standard deviations from their column's mean" />
-          </div>
-          {result.numeric_summaries.length > 0 && (
-            <div className="scroll-table">
-              <table className="data" aria-label="Numeric statistics">
-                <thead>
-                  <tr>
-                    <th>Column</th>
-                    <th className="num">Mean</th>
-                    <th className="num">Median</th>
-                    <th className="num">Std dev</th>
-                    <th className="num">Min</th>
-                    <th className="num">25%</th>
-                    <th className="num">75%</th>
-                    <th className="num">Max</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.numeric_summaries.map((s) => (
-                    <tr key={s.column}>
-                      <td>{s.column}</td>
-                      <td className="num">{formatNumber(s.mean)}</td>
-                      <td className="num">{formatNumber(s.median)}</td>
-                      <td className="num">{formatNumber(s.std)}</td>
-                      <td className="num">{formatNumber(s.min)}</td>
-                      <td className="num">{formatNumber(s.q25)}</td>
-                      <td className="num">{formatNumber(s.q75)}</td>
-                      <td className="num">{formatNumber(s.max)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <Charts charts={visuals.explore ?? []} />
+          <VariablesPanel variables={result.variables} selected={variable} onSelect={setVariable} />
         </section>
       )}
 
@@ -483,6 +445,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
             <Tile label="Linked categories" value={String(realAssociations)} hint="Category pairs that go together (chi-square, adjusted p < 0.05)" />
           </div>
           <Charts charts={visuals.relationships ?? []} />
+          <BreakdownExplorer breakdowns={result.breakdowns} crosstabs={result.crosstabs} />
           {result.correlations.length > 0 && (
             <>
               <h3>Correlations</h3>
@@ -503,8 +466,8 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
         </section>
       )}
 
-      {tab === "time-series" && (
-        <section {...panelProps("time-series")}>
+      {tab === "time" && (
+        <section {...panelProps("time")}>
           <p className="takeaway">{timeSeriesTakeaway(result)}</p>
           <div className="stats">
             <Tile label="Series" value={String(result.time_series.length)} />
@@ -512,30 +475,21 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
               <Tile label="Time from" value={AXIS_KINDS[result.time_axis.kind] ?? result.time_axis.kind} hint={result.time_axis.label} />
             )}
             <Tile label="Seasonal" value={String(seasonal)} hint="Series where a repeating pattern explains 40% or more of the variation" />
-            <Tile label="Forecasts" value={String(result.time_series.filter((t) => t.forecast.length > 0).length)} />
           </div>
           <TimeSeriesPanel series={result.time_series} />
         </section>
       )}
 
-      {tab === "clustering" && (
-        <section {...panelProps("clustering")}>
-          <p className="takeaway">{clusteringTakeaway(result)}</p>
-          <ClusteringPanel clustering={result.clustering} charts={visuals.clustering ?? []} />
+      {tab === "next" && (
+        <section {...panelProps("next")}>
+          <p className="takeaway">{suggestionsTakeaway(result)}</p>
+          <SuggestionsPanel
+            sessionId={result.session_id}
+            recommendations={result.recommendations}
+            onAction={handleAction}
+          />
         </section>
       )}
-
-      {/* Stays mounted so training starts right away and keeps running on other tabs. */}
-      <section {...panelProps("models")} hidden={tab !== "models"}>
-        <MachineLearningPanel
-          sessionId={result.session_id}
-          columns={result.columns}
-          suggestions={result.model_targets}
-          autoTrain
-          visible={tab === "models"}
-          request={modelRequest}
-        />
-      </section>
 
       {tab === "build" && (
         <section {...panelProps("build")}>
