@@ -22,7 +22,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.config import settings
-from app.models.schemas import AnalysisResult, ChatTurn
+from app.models.schemas import AnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- Breaks ties between sessions used in the same clock tick, so eviction order is exact.
     use_seq     INTEGER NOT NULL,
     result_json TEXT NOT NULL,
-    cleaned_csv BLOB,
-    chart_csv   BLOB
+    cleaned_csv BLOB
 );
 CREATE INDEX IF NOT EXISTS sessions_by_last_use ON sessions (last_used, use_seq);
 """
@@ -61,10 +60,6 @@ class SessionStore:
         # One connection shared by the event loop and the worker threads, guarded by the lock.
         self._db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._db.executescript(_SCHEMA)
-        # Databases created before custom charts lack this column.
-        columns = {row[1] for row in self._db.execute("PRAGMA table_info(sessions)")}
-        if "chart_csv" not in columns:
-            self._db.execute("ALTER TABLE sessions ADD COLUMN chart_csv BLOB")
         last_seq = self._db.execute("SELECT COALESCE(MAX(use_seq), 0) FROM sessions").fetchone()[0]
         self._seq = itertools.count(last_seq + 1)
 
@@ -74,8 +69,8 @@ class SessionStore:
             self._drop_expired(now)
             self._db.execute(
                 """INSERT OR REPLACE INTO sessions
-                   (id, filename, created_at, last_used, use_seq, result_json, cleaned_csv, chart_csv)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (id, filename, created_at, last_used, use_seq, result_json, cleaned_csv)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     result.session_id,
                     result.filename,
@@ -84,7 +79,6 @@ class SessionStore:
                     next(self._seq),
                     result.model_dump_json(),
                     result.cleaned_csv,
-                    result.chart_csv,
                 ),
             )
             self._db.execute(
@@ -100,7 +94,7 @@ class SessionStore:
         with self._lock:
             self._drop_expired(now)
             row = self._db.execute(
-                "SELECT result_json, cleaned_csv, chart_csv FROM sessions WHERE id = ?", (session_id,)
+                "SELECT result_json, cleaned_csv FROM sessions WHERE id = ?", (session_id,)
             ).fetchone()
             if row is None:
                 return None
@@ -116,25 +110,7 @@ class SessionStore:
                 (now, next(self._seq), session_id),
             )
         result._cleaned_csv = row[1]
-        result._chart_csv = row[2]
         return result
-
-    def add_chat_turn(self, session_id: str, turn: ChatTurn, *, max_turns: int) -> bool:
-        """Append a question and answer to a session, keeping the newest max_turns.
-
-        Done under the lock in one read-modify-write, so two questions answered
-        at once both land. False if the session has gone in the meantime.
-        """
-        with self._lock:
-            row = self._db.execute("SELECT result_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
-            if row is None:
-                return False
-            result = AnalysisResult.model_validate_json(row[0])
-            result.chat_history = [*result.chat_history, turn][-max_turns:]
-            self._db.execute(
-                "UPDATE sessions SET result_json = ? WHERE id = ?", (result.model_dump_json(), session_id)
-            )
-            return True
 
     def delete(self, session_id: str) -> bool:
         with self._lock:
@@ -166,10 +142,6 @@ def save(result: AnalysisResult) -> None:
 
 def get(session_id: str) -> AnalysisResult | None:
     return store.get(session_id)
-
-
-def add_chat_turn(session_id: str, turn: ChatTurn, *, max_turns: int) -> bool:
-    return store.add_chat_turn(session_id, turn, max_turns=max_turns)
 
 
 def delete(session_id: str) -> bool:

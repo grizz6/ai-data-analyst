@@ -77,5 +77,10 @@ export function variablesTakeaway(r: AnalysisResult): string {
 export function suggestionsTakeaway(r: AnalysisResult): string {
   const recs = r.recommendations;
   if (!recs.length) return "No follow-up analysis stands out for this data.";
-  return `${recs.length} analyses this data supports · start with: ${recs[0].title}`;
+  const ready = recs.filter((x) => x.readiness === "ready").length;
+  const work = recs.filter((x) => x.readiness === "needs_work").length;
+  const weak = recs.length - ready - work;
+  const parts = [`${recs.length} analyses this data supports`, `${ready} ready`, `${work} need work first`];
+  if (weak) parts.push(`${weak} on weak evidence`);
+  return parts.join(" · ");
 }

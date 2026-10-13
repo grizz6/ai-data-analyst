@@ -27,7 +27,7 @@ from app.models.schemas import (
     Recommendation,
     RecommendationAction,
 )
-from app.services import explanation
+from app.services import explanation, review
 from app.services.grounding import ungrounded_numbers
 from app.services.llm_client import LLMClient, LLMError
 from app.services.semantics import name_words
@@ -272,6 +272,7 @@ def recommend(result: AnalysisResult) -> list[Recommendation]:
             )
         )
 
+    recs = [review.assess(r, result) for r in recs]
     recs.sort(key=lambda r: r.score, reverse=True)
     return recs
 
@@ -305,9 +306,7 @@ def _input_checks(result: AnalysisResult, exclude: str) -> list[str]:
     if gappy:
         listed = ", ".join(f"{v.name} ({v.missing_share:g}%)" for v in gappy[:3])
         checks.append(f"Missing values to handle: {listed}.")
-    twins = [
-        c for c in result.correlations if abs(c.correlation) >= 0.8 and exclude not in (c.column_a, c.column_b)
-    ]
+    twins = [c for c in result.correlations if abs(c.correlation) >= 0.8 and exclude not in (c.column_a, c.column_b)]
     if twins:
         c = twins[0]
         checks.append(
@@ -332,17 +331,63 @@ def _strongest_correlations(result: AnalysisResult) -> dict[str, tuple[str, floa
 
 GOAL_KEYWORDS: dict[str, tuple[str, ...]] = {
     "logistic_regression": (
-        "churn", "retain", "retention", "cancel", "leave", "convert", "conversion", "default", "fraud",
-        "click", "buy", "purchase", "whether", "yes", "approve", "risk", "classify", "likelihood", "probability",
+        "churn",
+        "retain",
+        "retention",
+        "cancel",
+        "leave",
+        "convert",
+        "conversion",
+        "default",
+        "fraud",
+        "click",
+        "buy",
+        "purchase",
+        "whether",
+        "yes",
+        "approve",
+        "risk",
+        "classify",
+        "likelihood",
+        "probability",
     ),
     "classification": ("classify", "category", "which type", "which kind", "label", "predict which"),
     "linear_regression": (
-        "predict", "estimate", "price", "revenue", "sales", "spend", "amount", "how much", "value", "cost",
-        "driver", "drive", "factor", "influence", "affect", "impact", "explain", "why",
+        "predict",
+        "estimate",
+        "price",
+        "revenue",
+        "sales",
+        "spend",
+        "amount",
+        "how much",
+        "value",
+        "cost",
+        "driver",
+        "drive",
+        "factor",
+        "influence",
+        "affect",
+        "impact",
+        "explain",
+        "why",
     ),
     "time_series": (
-        "forecast", "future", "next month", "next year", "next quarter", "trend", "over time", "season",
-        "growth", "demand", "plan", "budget", "monthly", "weekly", "daily",
+        "forecast",
+        "future",
+        "next month",
+        "next year",
+        "next quarter",
+        "trend",
+        "over time",
+        "season",
+        "growth",
+        "demand",
+        "plan",
+        "budget",
+        "monthly",
+        "weekly",
+        "daily",
     ),
     "clustering": ("segment", "group", "cluster", "persona", "types of", "target", "audience", "similar"),
     "group_comparison": ("compare", "difference", "versus", "vs", "region", "best", "worst", "which", "between"),
@@ -353,9 +398,11 @@ GOAL_KEYWORDS: dict[str, tuple[str, ...]] = {
 }
 
 PLAN_SYSTEM_PROMPT = f"""\
-You turn a business goal into a short plan of analyses on one dataset. An automated
-exploration has already run; you are given its results ("facts") and a list of analyses
-this data supports ("options"), each with an id, the reason it fits and what to check first.
+You are a senior data analyst turning a business goal into a short, honest plan of
+analyses on one dataset. An automated exploration has already run; you are given its
+results ("facts", including a critical review of the data) and the analyses this data
+supports ("options"), each with an id, the reason it fits, how ready the data is for it,
+its risks and what to check first. Be critical: say what could make each step mislead.
 
 {explanation.GROUND_RULES}
 
@@ -365,7 +412,7 @@ could distort the answer. Use only ids from the options.
 
 The JSON object must have exactly one key, "steps": a list of objects with "id" (copied
 from the options) and "why" (one or two sentences linking that analysis to the goal,
-naming the columns involved). When the file can't answer part of the goal (a column
+naming the columns involved and the main risk to its answer). When the file can't answer part of the goal (a column
 it would need doesn't exist), add a key "note" with one sentence saying so."""
 
 
@@ -390,7 +437,18 @@ def rule_plan(
     chosen = chosen[:MAX_PLAN_STEPS]
     # Fixing the data comes first whenever it made the plan.
     chosen.sort(key=lambda r: 0 if r.analysis in ("data_quality", "outliers") else 1)
-    steps = [PlanStep(id=r.id, title=r.title, why=r.why, action=r.action, check_first=r.check_first) for r in chosen]
+    steps = [
+        PlanStep(
+            id=r.id,
+            title=r.title,
+            why=r.why,
+            action=r.action,
+            readiness=r.readiness,
+            risks=r.risks,
+            check_first=r.check_first,
+        )
+        for r in chosen
+    ]
     return PlanResponse(
         goal=goal, steps=steps, note=note, configured=configured, source="rule_based", fallback_reason=reason
     )
@@ -414,7 +472,18 @@ async def plan_for_goal(result: AnalysisResult, goal: str, client: LLMClient | N
 
     client = client or explanation.make_client()
     facts = explanation.build_facts(result)
-    options = [{"id": r.id, "analysis": r.analysis, "title": r.title, "why_it_fits": r.why} for r in recs]
+    options = [
+        {
+            "id": r.id,
+            "analysis": r.analysis,
+            "title": r.title,
+            "why_it_fits": r.why,
+            "readiness": r.readiness,
+            "risks": r.risks,
+            "check_first": r.check_first,
+        }
+        for r in recs
+    ]
     payload: dict[str, Any] = {"goal": goal, "options": options, "facts": facts}
     try:
         reply = await client.chat_json(PLAN_SYSTEM_PROMPT, json.dumps(payload, default=str))
@@ -430,7 +499,17 @@ async def plan_for_goal(result: AnalysisResult, goal: str, client: LLMClient | N
         rec = by_id.get(step.id)
         if rec is None or any(s.id == rec.id for s in steps):
             continue
-        steps.append(PlanStep(id=rec.id, title=rec.title, why=step.why, action=rec.action, check_first=rec.check_first))
+        steps.append(
+            PlanStep(
+                id=rec.id,
+                title=rec.title,
+                why=step.why,
+                action=rec.action,
+                readiness=rec.readiness,
+                risks=rec.risks,
+                check_first=rec.check_first,
+            )
+        )
     if not steps:
         return _plan_fallback(result, goal, "model chose no analysis the app can run")
     steps = steps[:MAX_PLAN_STEPS]
@@ -448,4 +527,3 @@ async def plan_for_goal(result: AnalysisResult, goal: str, client: LLMClient | N
 def _plan_fallback(result: AnalysisResult, goal: str, reason: str) -> PlanResponse:
     logger.warning("LLM plan fell back to rules: %s", reason)
     return rule_plan(result, goal, configured=True, reason=reason)
-

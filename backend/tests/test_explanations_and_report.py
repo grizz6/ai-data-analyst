@@ -53,18 +53,6 @@ def test_clean_file_gets_an_all_clear_recommendation():
     ]
 
 
-def test_ask_without_key_returns_findings_not_placeholder(client, sample_csv_bytes):
-    session_id = client.post(
-        "/api/upload", files={"file": ("sales_sample.csv", sample_csv_bytes, "text/csv")}
-    ).json()["session_id"]
-    body = client.post(f"/api/sessions/{session_id}/ask", json={"question": "Top region?"}).json()
-
-    assert "placeholder" not in body["answer"].lower()
-    assert "Here is what the analysis found" in body["answer"]
-    assert "- Summary for sales: Mean 9,419.35" in body["answer"]
-    assert body["configured"] is False
-
-
 def test_report_embeds_every_chart_and_has_no_placeholder_text(planted_result):
     html = render_html_report(planted_result)
 

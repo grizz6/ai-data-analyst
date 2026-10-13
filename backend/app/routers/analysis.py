@@ -11,29 +11,18 @@ from starlette.concurrency import run_in_threadpool
 
 from app import security
 from app.config import settings
-from app.models.schemas import (
-    AnalysisResult,
-    ChartSpec,
-    ChatTurn,
-    CustomChartRequest,
-    PlanRequest,
-    PlanResponse,
-    QuestionRequest,
-    QuestionResponse,
-)
-from app.services import advice, custom_charts, eda, explanation, report
+from app.models.schemas import AnalysisResult, PlanRequest, PlanResponse
+from app.services import advice, eda, explanation, report
 from app.services.ingestion import DatasetError
 from app.services.pipeline import run_full_analysis
-from app.session_store import add_chat_turn, delete, get, save
-from app.workload import BusyError, busy_detail, run_in_slot
+from app.session_store import delete, get, save
+from app.workload import BusyError, busy_detail
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
 
 ALLOWED_SUFFIXES = {".csv", ".xlsx", ".xls"}
 READ_CHUNK_BYTES = 1024 * 1024
-# Questions kept per analysis; older ones drop off the start of the thread.
-MAX_CHAT_TURNS = 30
 
 
 def session_or_404(session_id: str) -> AnalysisResult:
@@ -131,24 +120,6 @@ async def delete_session(session_id: str) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/sessions/{session_id}/ask", response_model=QuestionResponse)
-async def ask_question(session_id: str, body: QuestionRequest):
-    result = session_or_404(session_id)
-    if not body.question.strip():
-        raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    question = body.question.strip()
-    response = await explanation.answer_question(result, question)
-    turn = ChatTurn(
-        question=question[: explanation.MAX_QUESTION_CHARS],
-        answer=response.answer,
-        source=response.source,
-        model=response.model,
-        fallback_reason=response.fallback_reason,
-    )
-    add_chat_turn(session_id, turn, max_turns=MAX_CHAT_TURNS)
-    return response
-
-
 @router.post("/sessions/{session_id}/plan", response_model=PlanResponse)
 async def plan_for_goal(session_id: str, body: PlanRequest):
     """Order the analyses that fit this file into a plan for a business goal."""
@@ -156,26 +127,6 @@ async def plan_for_goal(session_id: str, body: PlanRequest):
     if not body.goal.strip():
         raise HTTPException(status_code=400, detail="Describe the goal first.")
     return await advice.plan_for_goal(result, body.goal)
-
-
-@router.post("/sessions/{session_id}/charts", response_model=ChartSpec)
-async def build_chart(session_id: str, body: CustomChartRequest):
-    result = session_or_404(session_id)
-    if result.chart_csv is None:
-        raise HTTPException(
-            status_code=404, detail="Custom charts aren't available for this analysis; upload the file again."
-        )
-
-    def build() -> ChartSpec:
-        df = custom_charts.load_chart_data(result, result.chart_csv or b"")
-        return custom_charts.build_custom_chart(df, body)
-
-    try:
-        return await run_in_threadpool(run_in_slot, build)
-    except custom_charts.ChartRequestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except BusyError as exc:
-        raise HTTPException(status_code=503, detail=busy_detail(), headers={"Retry-After": "30"}) from exc
 
 
 @router.get("/sessions/{session_id}/dictionary.csv")

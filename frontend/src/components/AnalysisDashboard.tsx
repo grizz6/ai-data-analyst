@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState, type KeyboardEvent } from "react";
-import { askQuestion, cleanedCsvUrl, deleteSession, dictionaryUrl, printableReportUrl, reportDownloadUrl } from "../api";
+import { cleanedCsvUrl, deleteSession, dictionaryUrl, printableReportUrl, reportDownloadUrl } from "../api";
 import { formatNumber, formatP, friendlyType } from "../format";
 import {
   overviewTakeaway,
@@ -9,11 +9,10 @@ import {
   timeSeriesTakeaway,
   variablesTakeaway,
 } from "../takeaways";
-import type { AnalysisResult, ChartSpec, ChatTurn, RecommendationAction } from "../types";
+import type { AnalysisResult, ChartSpec, RecommendationAction } from "../types";
 // Plotly is most of the app's JavaScript. Loading it with the charts, not with
 // the upload screen, keeps the first page light.
 const ChartGrid = lazy(() => import("./ChartGrid"));
-import ChartBuilder from "./ChartBuilder";
 import DataTable from "./DataTable";
 import Hint from "./Hint";
 import BreakdownExplorer from "./BreakdownExplorer";
@@ -25,20 +24,6 @@ import { KIND_LABELS } from "./VariableCard";
 import TimeSeriesPanel from "./TimeSeriesPanel";
 import VariablesPanel from "./VariablesPanel";
 
-/** A few questions this file can answer, built from its own columns. */
-export function suggestedQuestions(result: AnalysisResult): string[] {
-  const questions: string[] = [];
-  const category = result.categorical_summaries[0]?.column;
-  const measure = result.numeric_summaries[0]?.column;
-  if (category && measure) questions.push(`Which ${category} has the highest ${measure}?`);
-  const pair = result.correlations[0];
-  if (pair) questions.push(`How are ${pair.column_a} and ${pair.column_b} related?`);
-  const trend = result.trends[0];
-  if (trend) questions.push(`How is ${trend.column} changing over time?`);
-  questions.push("What should I look into first?");
-  return questions;
-}
-
 const AXIS_KINDS: Record<string, string> = {
   dates: "date column",
   date_parts: "date parts",
@@ -48,29 +33,7 @@ const AXIS_KINDS: Record<string, string> = {
   row_order: "row order",
 };
 
-type TabId = "overview" | "quality" | "variables" | "relationships" | "time" | "next" | "ask" | "build" | "data";
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  if (!navigator.clipboard) return null;
-  return (
-    <button
-      type="button"
-      className="link-btn small"
-      onClick={() =>
-        navigator.clipboard.writeText(text).then(
-          () => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          },
-          () => {},
-        )
-      }
-    >
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
+type TabId = "overview" | "quality" | "variables" | "relationships" | "time" | "next" | "data";
 
 function Charts({ charts, result }: { charts: ChartSpec[]; result?: AnalysisResult }) {
   if (charts.length === 0) return null;
@@ -105,37 +68,7 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     }
   };
 
-  const [question, setQuestion] = useState("");
-  // Starts from the thread stored with the session, so it survives a reload.
-  const [thread, setThread] = useState<ChatTurn[]>(result.chat_history);
-  const [asking, setAsking] = useState(false);
-  const [askError, setAskError] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<"raw" | "cleaned">("cleaned");
-
-  const handleAsk = async (text: string = question) => {
-    const asked = text.trim();
-    if (!asked || asking) return;
-    setAsking(true);
-    setAskError(null);
-    try {
-      const res = await askQuestion(result.session_id, asked);
-      setThread((turns) => [
-        ...turns,
-        {
-          question: asked,
-          answer: res.answer,
-          source: res.source,
-          model: res.model,
-          fallback_reason: res.fallback_reason,
-        },
-      ]);
-      setQuestion("");
-    } catch (e) {
-      setAskError(e instanceof Error ? e.message : "Failed to get answer");
-    } finally {
-      setAsking(false);
-    }
-  };
 
   const visuals = result.visuals ?? {};
   const tabs: [TabId, string][] = [
@@ -145,8 +78,6 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     ["relationships", "Relationships"],
     ...(result.time_series.length > 0 ? [["time", "Over time"] as [TabId, string]] : []),
     ["next", "Next steps"],
-    ["ask", "Ask"],
-    ["build", "Build a chart"],
     ["data", "Data"],
   ];
   const [tab, setTab] = useState<TabId>(() => {
@@ -174,8 +105,6 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
     tabButtons.current[next]?.focus();
   };
 
-  const asked = new Set(thread.map((t) => t.question));
-  const suggestions = suggestedQuestions(result).filter((q) => !asked.has(q));
 
   // The same column types as the Variables tab and the written summary.
   const kinds = result.variables.reduce<Record<string, number>>((acc, v) => {
@@ -485,83 +414,10 @@ export default function AnalysisDashboard({ result, loading = false, onAnalyzeSh
           <p className="takeaway">{suggestionsTakeaway(result)}</p>
           <SuggestionsPanel
             sessionId={result.session_id}
+            review={result.review}
             recommendations={result.recommendations}
             onAction={handleAction}
           />
-        </section>
-      )}
-
-      {tab === "build" && (
-        <section {...panelProps("build")}>
-          <p className="takeaway">Pick a chart type and columns; every figure is computed from your data as recorded.</p>
-          <ChartBuilder sessionId={result.session_id} columns={result.columns} />
-        </section>
-      )}
-
-      {tab === "ask" && (
-        <section {...panelProps("ask")}>
-          <p className="takeaway">
-            Answers come from the computed results only.{" "}
-            <Hint text="Free-form answers need an LLM API key on the server; without one you get the key findings. Follow-ups can refer to earlier answers." />
-          </p>
-          {thread.length > 0 && (
-            <ol className="qa-thread" aria-label="Questions and answers">
-              {thread.map((turn, i) => (
-                <li key={i}>
-                  <div className="qa-question">{turn.question}</div>
-                  <div className="qa-answer">
-                    {turn.answer}
-                    <div className="qa-meta">
-                      <span className="qa-source">
-                        {turn.source === "llm" ? `Written by ${turn.model}` : "Rule-based"}
-                      </span>
-                      <CopyButton text={turn.answer} />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-          {suggestions.length > 0 && (
-            <div className="suggestions" aria-label="Suggested questions">
-              {suggestions.map((q) => (
-                <button key={q} type="button" className="chip" disabled={asking} onClick={() => handleAsk(q)}>
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="qa-box">
-            <textarea
-              aria-label="Your question"
-              maxLength={2000}
-              placeholder={
-                thread.length > 0
-                  ? "Ask a follow-up…"
-                  : "e.g. Which region had the highest sales? What trends do you see?"
-              }
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  void handleAsk();
-                }
-              }}
-            />
-            <div className="qa-actions">
-              <span className="muted small">Enter to send · Shift+Enter for a new line</span>
-              <button
-                type="button"
-                className="btn"
-                disabled={asking || !question.trim()}
-                onClick={() => handleAsk()}
-              >
-                {asking ? "Thinking…" : "Ask"}
-              </button>
-            </div>
-            {askError && <p className="error-msg">{askError}</p>}
-          </div>
         </section>
       )}
 

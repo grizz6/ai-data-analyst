@@ -1,10 +1,4 @@
-import type {
-  AnalysisResult,
-  ChartSpec,
-  CustomChartRequest,
-  PlanResponse,
-  QuestionResponse,
-} from "./types";
+import type { AnalysisResult, PlanResponse } from "./types";
 
 /** The server's message for a failed request, or `fallback` when it sent none worth showing. */
 async function errorMessage(res: Response, fallback: string): Promise<string> {
@@ -30,33 +24,6 @@ export async function getSession(sessionId: string): Promise<AnalysisResult> {
   const res = await fetch(`/api/sessions/${sessionId}`);
   if (!res.ok) {
     throw new Error(await errorMessage(res, "Couldn't open that analysis"));
-  }
-  return res.json();
-}
-
-export async function askQuestion(
-  sessionId: string,
-  question: string
-): Promise<QuestionResponse> {
-  const res = await fetch(`/api/sessions/${sessionId}/ask`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
-  });
-  if (!res.ok) {
-    throw new Error(await errorMessage(res, "Question failed"));
-  }
-  return res.json();
-}
-
-export async function buildChart(sessionId: string, request: CustomChartRequest): Promise<ChartSpec> {
-  const res = await fetch(`/api/sessions/${sessionId}/charts`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
-  if (!res.ok) {
-    throw new Error(await errorMessage(res, "Chart failed"));
   }
   return res.json();
 }

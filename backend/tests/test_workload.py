@@ -47,17 +47,6 @@ def test_upload_while_another_is_running_gets_503_not_a_crash(client, sample_csv
     assert "busy" in res.json()["detail"]
 
 
-@pytest.fixture
-def session_id(client, sample_csv_bytes) -> str:
-    return client.post("/api/upload", files={"file": ("s.csv", sample_csv_bytes, "text/csv")}).json()["session_id"]
-
-
-def test_chart_build_waits_for_the_same_slot(client, session_id, request):
-    chart = {"chart_type": "histogram", "x": "units"}
-    request.getfixturevalue("slot_taken")
-    assert client.post(f"/api/sessions/{session_id}/charts", json=chart).status_code == 503
-
-
 def test_slot_is_released_after_an_error():
     with pytest.raises(ZeroDivisionError):
         workload.run_in_slot(lambda: 1 / 0)

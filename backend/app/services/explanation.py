@@ -23,9 +23,7 @@ from app.config import settings
 from app.models.schemas import (
     AnalysisResult,
     Explanation,
-    ModelAnswer,
     ModelExplanation,
-    QuestionResponse,
 )
 from app.services.grounding import ungrounded_numbers
 from app.services.llm_client import LLMClient, LLMError
@@ -36,9 +34,6 @@ HIGHLIGHT_CATEGORIES = ("correlation", "trend", "categorical")
 MAX_RECOMMENDATIONS = 6
 MAX_FACT_VARIABLES = 40
 MAX_STORY_POINTS = 5
-MAX_QUESTION_CHARS = 1_000
-# Earlier questions and answers sent along with a new one, so "what about East?" makes sense.
-MAX_CONTEXT_TURNS = 6
 
 GROUND_RULES = """\
 Rules you must follow:
@@ -65,17 +60,6 @@ The JSON object must have exactly these keys:
 - "recommendations": a list of up to 5 short things to check or fix in the data before using it.
 - "chart_explanations": a list of objects with "chart_id" (copied from the facts) and
   "explanation" (one or two sentences on what that chart shows)."""
-
-ANSWER_SYSTEM_PROMPT = f"""\
-You answer a question about a dataset using only the results of an automated analysis.
-
-{GROUND_RULES}
-
-You may be given the earlier conversation about this dataset. Use it only to understand
-what a follow-up question refers to; the facts remain the only source of figures.
-
-The JSON object must have exactly one key, "answer", holding your answer as a string."""
-
 
 def is_llm_configured() -> bool:
     return settings.llm_configured
@@ -151,6 +135,7 @@ def build_facts(result: AnalysisResult) -> dict[str, Any]:
             {"column": m.column, "missing_percent": m.missing_share, "related": [r.detail for r in m.related]}
             for m in result.missing_dependencies
         ],
+        "analyst_review": result.review.model_dump() if result.review else None,
         "numbers_by_group": [
             {
                 "value": b.value,
@@ -321,24 +306,6 @@ def _recommendations(result: AnalysisResult) -> list[str]:
     return recs[:MAX_RECOMMENDATIONS]
 
 
-def rule_based_answer(
-    result: AnalysisResult, *, configured: bool = False, fallback_reason: str | None = None
-) -> QuestionResponse:
-    # Titles carry the column name ("Summary for sales"); some messages don't repeat it.
-    highlights = "\n".join(f"- {i.title}: {i.message}" for i in result.rule_insights[:6])
-    opening = (
-        "The language model couldn't answer just now, so here is what the analysis found:"
-        if configured
-        else "Free-form questions need an LLM API key on the server, and none is set. Here is what the analysis found:"
-    )
-    return QuestionResponse(
-        answer=f"{opening}\n{highlights or '- No insights were generated for this file.'}",
-        configured=configured,
-        source="rule_based",
-        fallback_reason=fallback_reason,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Model-written text, with every failure path landing on the rule-based text.
 # ---------------------------------------------------------------------------
@@ -383,44 +350,9 @@ async def explain_analysis(result: AnalysisResult, client: LLMClient | None = No
     )
 
 
-async def answer_question(result: AnalysisResult, question: str, client: LLMClient | None = None) -> QuestionResponse:
-    if not is_llm_configured():
-        return rule_based_answer(result, configured=False)
-
-    client = client or make_client()
-    facts = build_facts(result)
-    earlier = [{"question": t.question, "answer": t.answer} for t in result.chat_history[-MAX_CONTEXT_TURNS:]]
-    payload: dict[str, Any] = {"question": question[:MAX_QUESTION_CHARS], "facts": facts}
-    if earlier:
-        payload["earlier_conversation"] = earlier
-    user_message = json.dumps(payload, default=str)
-    try:
-        reply = await client.chat_json(ANSWER_SYSTEM_PROMPT, user_message)
-        parsed = ModelAnswer.model_validate(reply.data)
-    except LLMError as exc:
-        return _answer_fallback(result, f"model call failed: {exc}")
-    except ValidationError:
-        return _answer_fallback(result, "model reply was missing the answer")
-
-    # The questions themselves may contain numbers ("top 3"), so those count as given too.
-    # Earlier answers don't: a number has to come from the facts, not from a past reply.
-    given = {"facts": facts, "question": question, "earlier_questions": [t["question"] for t in earlier]}
-    invented = ungrounded_numbers(parsed.answer, given)
-    if invented:
-        return _answer_fallback(result, f"model wrote numbers not in the analysis: {', '.join(invented[:5])}")
-
-    _log_call("answer", reply, outcome="ok")
-    return QuestionResponse(answer=parsed.answer, configured=True, source="llm", model=reply.model)
-
-
 def _explanation_fallback(result: AnalysisResult, reason: str) -> Explanation:
     logger.warning("LLM explanation fell back to rule-based text: %s", reason)
     return rule_based_explanation(result, configured=True, fallback_reason=reason)
-
-
-def _answer_fallback(result: AnalysisResult, reason: str) -> QuestionResponse:
-    logger.warning("LLM answer fell back to rule-based text: %s", reason)
-    return rule_based_answer(result, configured=True, fallback_reason=reason)
 
 
 def _log_call(kind: str, reply, *, outcome: str) -> None:

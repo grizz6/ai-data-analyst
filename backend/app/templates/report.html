@@ -214,12 +214,37 @@
   </section>
   {% endif %}
 
-  {% if result.recommendations %}
+  {% if result.review %}
+  {% set rv = result.review %}
   <section>
-    <h2>What this data could be used for next</h2>
+    <h2>Analyst's read</h2>
+    <p><strong>{{ rv.verdict }}</strong></p>
+    {% if rv.concerns %}
+    <h3>Concerns, most serious first</h3>
+    <ol>{% for c in rv.concerns %}<li>{{ c }}</li>{% endfor %}</ol>
+    {% endif %}
+    {% if rv.strengths %}
+    <h3>What it does well</h3>
+    <ul>{% for c in rv.strengths %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if rv.cannot_conclude %}
+    <h3>What this data can't tell you</h3>
+    <ul>{% for c in rv.cannot_conclude %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if result.recommendations %}
+  {% set READY = {"ready": "Ready", "needs_work": "Needs work first", "weak": "Weak evidence"} %}
+  <section>
+    <h2>Next steps</h2>
     <ol>
       {% for rec in result.recommendations %}
-      <li><strong>{{ rec.title }}.</strong> {{ rec.why }}{% if rec.check_first %} <em>Check first:</em> {{ rec.check_first | join(" ") }}{% endif %}</li>
+      <li><strong>{{ rec.title }}</strong> <span class="badge {{ 'info' if rec.readiness == 'ready' else 'warning' }}">{{ READY.get(rec.readiness, rec.readiness) }}</span><br>
+        {{ rec.why }}
+        {% if rec.risks %}<br><em>Risks:</em> {{ rec.risks | join(" ") }}{% endif %}
+        {% if rec.check_first %}<br><em>Check first:</em> {{ rec.check_first | join(" ") }}{% endif %}
+      </li>
       {% endfor %}
     </ol>
   </section>
@@ -241,18 +266,6 @@
   </section>
   {% endif %}
 
-  {% if result.chat_history %}
-  <section>
-    <h2>Questions asked</h2>
-    {% for turn in result.chat_history %}
-    <div class="qa">
-      <p><strong>Q:</strong> {{ turn.question }}</p>
-      <p class="answer"><strong>A:</strong> {{ turn.answer }}
-        <span class="src">({% if turn.source == "llm" %}written by {{ turn.model }}{% else %}rule-based{% endif %})</span></p>
-    </div>
-    {% endfor %}
-  </section>
-  {% endif %}
 
   <section>
     <h2>How this report was made</h2>

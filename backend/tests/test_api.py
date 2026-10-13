@@ -44,9 +44,9 @@ def test_unknown_session_is_404(client):
     assert client.get("/api/sessions/does-not-exist/report").status_code == 404
 
 
-def test_blank_question_is_rejected(client, sample_csv_bytes):
+def test_blank_goal_is_rejected(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes, "sales_sample.csv").json()["session_id"]
-    res = client.post(f"/api/sessions/{session_id}/ask", json={"question": "   "})
+    res = client.post(f"/api/sessions/{session_id}/plan", json={"goal": "   "})
     assert res.status_code == 400
 
 

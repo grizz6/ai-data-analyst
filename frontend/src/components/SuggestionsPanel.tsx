@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { planForGoal } from "../api";
-import type { PlanResponse, Recommendation, RecommendationAction } from "../types";
+import type { AnalysisResult, PlanResponse, Recommendation, RecommendationAction } from "../types";
 import Hint from "./Hint";
 
 // The rest of the list is one click away, so the tab opens short.
@@ -13,10 +13,24 @@ const EXAMPLE_GOALS = [
   "Understand what drives revenue",
 ];
 
-function CheckFirst({ items }: { items: string[] }) {
+const READINESS: Record<Recommendation["readiness"], [string, string]> = {
+  ready: ["Ready", "good"],
+  needs_work: ["Needs work first", "warning"],
+  weak: ["Weak evidence", "info"],
+};
+
+const VERDICT: Record<NonNullable<AnalysisResult["review"]>["readiness"], string> = {
+  ready: "good",
+  needs_work: "warning",
+  not_ready: "error",
+};
+
+type Step = Pick<Recommendation, "title" | "why" | "readiness" | "risks" | "check_first" | "action">;
+
+function List({ label, items, className }: { label: string; items: string[]; className: string }) {
   if (!items.length) return null;
   return (
-    <ul className="check-first" aria-label="Check first">
+    <ul className={className} aria-label={label}>
       {items.map((item) => (
         <li key={item}>{item}</li>
       ))}
@@ -24,13 +38,33 @@ function CheckFirst({ items }: { items: string[] }) {
   );
 }
 
+function StepItem({ step, onAction }: { step: Step; onAction: (action: RecommendationAction) => void }) {
+  const [label, tone] = READINESS[step.readiness];
+  return (
+    <li>
+      <div className="plan-step-text">
+        <span className="step-title">
+          <strong>{step.title}</strong> <span className={`badge ${tone}`}>{label}</span>
+        </span>
+        <span>{step.why}</span>
+        <List label="Risks" items={step.risks} className="risks" />
+        <List label="Check first" items={step.check_first} className="check-first" />
+      </div>
+      <button type="button" className="btn secondary small-btn" onClick={() => onAction(step.action)}>
+        {step.action.label}
+      </button>
+    </li>
+  );
+}
+
 interface Props {
   sessionId: string;
+  review: AnalysisResult["review"];
   recommendations: Recommendation[];
   onAction: (action: RecommendationAction) => void;
 }
 
-export default function SuggestionsPanel({ sessionId, recommendations, onAction }: Props) {
+export default function SuggestionsPanel({ sessionId, review, recommendations, onAction }: Props) {
   const [goal, setGoal] = useState("");
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planning, setPlanning] = useState(false);
@@ -55,10 +89,61 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
 
   return (
     <>
+      {review && (
+        <section className="stats-section analyst-read" aria-label="Analyst's read">
+          <h3>
+            Analyst's read{" "}
+            <Hint text="A critical review of the whole dataset: what would mislead an analysis, what it does well, and what it can't support. Every point is computed from the exploration." />
+          </h3>
+          <p className={`verdict ${VERDICT[review.readiness]}`}>{review.verdict}</p>
+          {review.concerns.length > 0 && (
+            <>
+              <h4>Concerns, most serious first</h4>
+              <ol className="concerns" aria-label="Concerns">
+                {review.concerns.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ol>
+            </>
+          )}
+          <div className="grid-2">
+            <div>
+              <h4>What it does well</h4>
+              <List label="Strengths" items={review.strengths} className="insight-list" />
+            </div>
+            <div>
+              <h4>What it can't tell you</h4>
+              <List label="Can't conclude" items={review.cannot_conclude} className="insight-list" />
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="stats-section" aria-label="What this data could be used for">
+        <h3>
+          What this data could be used for{" "}
+          <Hint text="Analyses this data supports, ranked by how strongly the exploration backs them. Each says how ready the data is, what could make the answer wrong, and what to check first." />
+        </h3>
+        {recommendations.length === 0 ? (
+          <p className="muted">No analysis stands out for this file.</p>
+        ) : (
+          <ol className="plan-steps">
+            {shown.map((rec) => (
+              <StepItem key={rec.id} step={rec} onAction={onAction} />
+            ))}
+          </ol>
+        )}
+        {recommendations.length > SHOWN_AT_FIRST && (
+          <button type="button" className="link-btn" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show fewer" : `Show all ${recommendations.length}`}
+          </button>
+        )}
+      </section>
+
       <section className="stats-section" aria-label="Plan for a goal">
         <h3>
-          What are you trying to achieve?{" "}
-          <Hint text="Describe the business goal in your own words. The plan picks from the analyses this data supports, and every figure in it comes from the exploration." />
+          Have a specific goal?{" "}
+          <Hint text="Describe it in your own words. The plan picks from the analyses above, keeps their risks, and every figure in it comes from the exploration." />
         </h3>
         <div className="suggestions" aria-label="Example goals">
           {EXAMPLE_GOALS.map((g) => (
@@ -101,49 +186,10 @@ export default function SuggestionsPanel({ sessionId, recommendations, onAction 
             {plan.note && <p className="plan-note">{plan.note}</p>}
             <ol className="plan-steps">
               {plan.steps.map((step) => (
-                <li key={step.id}>
-                  <div className="plan-step-text">
-                    <strong>{step.title}</strong>
-                    <span>{step.why}</span>
-                    <CheckFirst items={step.check_first} />
-                  </div>
-                  <button type="button" className="btn secondary small-btn" onClick={() => onAction(step.action)}>
-                    {step.action.label}
-                  </button>
-                </li>
+                <StepItem key={step.id} step={step} onAction={onAction} />
               ))}
             </ol>
           </div>
-        )}
-      </section>
-
-      <section className="stats-section" aria-label="What this data could be used for">
-        <h3>
-          What this data could be used for{" "}
-          <Hint text="Analyses this data supports, ranked by how strongly the exploration backs them, each with what to check or fix first. The app explores; these are for you to run next." />
-        </h3>
-        {recommendations.length === 0 ? (
-          <p className="muted">No analysis stands out for this file.</p>
-        ) : (
-          <ol className="plan-steps">
-            {shown.map((rec) => (
-              <li key={rec.id}>
-                <div className="plan-step-text">
-                  <strong>{rec.title}</strong>
-                  <span>{rec.why}</span>
-                  <CheckFirst items={rec.check_first} />
-                </div>
-                <button type="button" className="btn secondary small-btn" onClick={() => onAction(rec.action)}>
-                  {rec.action.label}
-                </button>
-              </li>
-            ))}
-          </ol>
-        )}
-        {recommendations.length > SHOWN_AT_FIRST && (
-          <button type="button" className="link-btn" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Show fewer" : `Show all ${recommendations.length}`}
-          </button>
         )}
       </section>
     </>

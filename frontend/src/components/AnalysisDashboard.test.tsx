@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { jsonResponse, sampleResult } from "../test/fixtures";
+import { sampleResult } from "../test/fixtures";
 import AnalysisDashboard from "./AnalysisDashboard";
 
 // Plotly needs a real canvas and layout engine; the chart grid has nothing to test here.
@@ -91,8 +91,6 @@ describe("AnalysisDashboard", () => {
       "Relationships",
       "Over time",
       "Next steps",
-      "Ask",
-      "Build a chart",
       "Data",
     ]);
     await userEvent.keyboard("{ArrowRight}");
@@ -103,23 +101,6 @@ describe("AnalysisDashboard", () => {
   it("shows a time series tab only when the file has one", () => {
     render(<AnalysisDashboard result={sampleResult({ time_series: [] })} />);
     expect(screen.queryByRole("tab", { name: "Time series" })).not.toBeInTheDocument();
-  });
-
-  it("sends a question with Enter, but Shift+Enter starts a new line", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ answer: "Ok.", configured: false, source: "rule_based", model: null, fallback_reason: null }));
-    vi.stubGlobal("fetch", fetchMock);
-    render(<AnalysisDashboard result={sampleResult()} />);
-    await openTab("Ask");
-
-    const box = screen.getByRole("textbox", { name: "Your question" });
-    await userEvent.type(box, "First line{Shift>}{Enter}{/Shift}second");
-    expect(fetchMock).not.toHaveBeenCalled();
-    await userEvent.type(box, "{Enter}");
-
-    expect(await screen.findByText("Ok.")).toBeInTheDocument();
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ question: "First line\nsecond" });
   });
 
   it("shows each correlation with its sample size and p-value", async () => {
@@ -178,94 +159,12 @@ describe("AnalysisDashboard", () => {
     expect((await screen.findAllByTestId("chart-grid"))[0]).toHaveTextContent(`${result.visuals.relationships.length} charts`);
   });
 
-  it("asks a question and shows the answer", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ answer: "West leads on sales.", configured: false, source: "rule_based", fallback_reason: null }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-    const result = sampleResult();
-    render(<AnalysisDashboard result={result} />);
-    await openTab("Ask");
-
-    const ask = screen.getByRole("button", { name: "Ask" });
-    expect(ask).toBeDisabled();
-    await userEvent.type(screen.getByPlaceholderText(/Which region/), "Which region sells most?");
-    await userEvent.click(ask);
-
-    expect(await screen.findByText("West leads on sales.")).toBeInTheDocument();
-    expect(fetchMock.mock.calls[0][0]).toBe(`/api/sessions/${result.session_id}/ask`);
-  });
-
-  it("keeps the thread, clears the box, and shows earlier turns from the session", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        jsonResponse({
-          answer: "East is lowest.",
-          configured: true,
-          source: "llm",
-          model: "test-model",
-          fallback_reason: null,
-        }),
-      ),
-    );
-    const result = sampleResult({
-      chat_history: [
-        { question: "Which region sells most?", answer: "West.", source: "rule_based", model: null, fallback_reason: null },
-      ],
-    });
-    render(<AnalysisDashboard result={result} />);
-    await openTab("Ask");
-
-    const thread = screen.getByRole("list", { name: "Questions and answers" });
-    expect(within(thread).getByText("West.")).toBeInTheDocument();
-
-    const box = screen.getByRole("textbox", { name: "Your question" });
-    await userEvent.type(box, "And the least?{Control>}{Enter}{/Control}");
-
-    expect(await within(thread).findByText("East is lowest.")).toBeInTheDocument();
-    expect(within(thread).getByText("Written by test-model")).toBeInTheDocument();
-    expect(within(thread).getAllByRole("listitem")).toHaveLength(2);
-    expect(box).toHaveValue("");
-  });
-
-  it("offers questions built from the file's columns and asks one on click", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ answer: "West.", configured: false, source: "rule_based", model: null, fallback_reason: null }));
-    vi.stubGlobal("fetch", fetchMock);
-    render(<AnalysisDashboard result={sampleResult()} />);
-    await openTab("Ask");
-
-    const chip = screen.getByRole("button", { name: "Which region has the highest sales?" });
-    expect(screen.getByRole("button", { name: "How are sales and units related?" })).toBeInTheDocument();
-    await userEvent.click(chip);
-
-    expect(await screen.findByText("West.")).toBeInTheDocument();
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ question: "Which region has the highest sales?" });
-    // Once asked, a suggestion is no longer offered.
-    expect(screen.queryByRole("button", { name: "Which region has the highest sales?" })).not.toBeInTheDocument();
-  });
-
   it("links each tab to its panel", async () => {
     render(<AnalysisDashboard result={sampleResult()} />);
     for (const tab of screen.getAllByRole("tab")) {
       await userEvent.click(tab);
       expect(document.getElementById(tab.getAttribute("aria-controls")!)).toBeVisible();
     }
-  });
-
-  it("shows the server's message when the session has expired", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "This analysis wasn't found." }, 404)));
-    render(<AnalysisDashboard result={sampleResult()} />);
-    await openTab("Ask");
-
-    await userEvent.type(screen.getByPlaceholderText(/Which region/), "Anything?");
-    await userEvent.click(screen.getByRole("button", { name: "Ask" }));
-
-    expect(await screen.findByText("This analysis wasn't found.")).toBeInTheDocument();
   });
 
   it("lists next steps with what to check first, linking back to the exploration", async () => {

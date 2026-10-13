@@ -54,8 +54,8 @@ def test_plotly_is_served_locally_and_cached(client):
 
 def test_oversized_json_body_is_refused_before_it_is_read(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes)
-    big = '{"question": "' + "x" * 70_000 + '"}'
-    res = client.post(f"/api/sessions/{session_id}/ask", content=big, headers={"Content-Type": "application/json"})
+    big = '{"goal": "' + "x" * 70_000 + '"}'
+    res = client.post(f"/api/sessions/{session_id}/plan", content=big, headers={"Content-Type": "application/json"})
     assert res.status_code == 413
 
 
@@ -63,23 +63,16 @@ def test_body_without_a_length_is_refused(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes)
 
     def chunks():
-        yield b'{"question": "hi"}'
+        yield b'{"goal": "hi"}'
 
-    res = client.post(f"/api/sessions/{session_id}/ask", content=chunks(), headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json"}
+    res = client.post(f"/api/sessions/{session_id}/plan", content=chunks(), headers=headers)
     assert res.status_code == 411
 
 
-def test_overlong_question_is_rejected(client, sample_csv_bytes):
+def test_overlong_goal_is_rejected(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes)
-    assert client.post(f"/api/sessions/{session_id}/ask", json={"question": "q" * 2_001}).status_code == 422
-
-
-def test_chart_builds_are_rate_limited(client, monkeypatch, sample_csv_bytes):
-    session_id = upload(client, sample_csv_bytes)
-    monkeypatch.setattr(settings, "custom_charts_per_hour", 1)
-    chart = {"chart_type": "histogram", "x": "units"}
-    assert client.post(f"/api/sessions/{session_id}/charts", json=chart).status_code == 200
-    assert client.post(f"/api/sessions/{session_id}/charts", json=chart).status_code == 429
+    assert client.post(f"/api/sessions/{session_id}/plan", json={"goal": "g" * 1_001}).status_code == 422
 
 
 def test_api_docs_can_be_turned_off(monkeypatch):
@@ -99,11 +92,10 @@ def test_api_docs_can_be_turned_off(monkeypatch):
 
 def test_deleting_an_analysis_removes_everything_stored_with_it(client, sample_csv_bytes):
     session_id = upload(client, sample_csv_bytes)
-    client.post(f"/api/sessions/{session_id}/ask", json={"question": "What stands out?"})
+    client.post(f"/api/sessions/{session_id}/plan", json={"goal": "What stands out?"})
 
     assert client.delete(f"/api/sessions/{session_id}").status_code == 204
-    for suffix in ("", "/report", "/cleaned.csv"):
+    for suffix in ("", "/report", "/cleaned.csv", "/dictionary.csv"):
         assert client.get(f"/api/sessions/{session_id}{suffix}").status_code == 404
-    chart = {"chart_type": "histogram", "x": "units"}
-    assert client.post(f"/api/sessions/{session_id}/charts", json=chart).status_code == 404
+    assert client.post(f"/api/sessions/{session_id}/plan", json={"goal": "x"}).status_code == 404
     assert client.delete(f"/api/sessions/{session_id}").status_code == 404

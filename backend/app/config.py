@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # Wider files are refused: memory and result size grow with the square of
     # the column count (the correlation grid), and 3,000 columns needs over 1 GB.
     max_columns: int = 200
-    # Analyses and custom charts run this many at a time; others wait up to
+    # Analyses run this many at a time; others wait up to
     # analysis_queue_wait_seconds, then get a "busy" message (see app/workload.py).
     max_concurrent_analyses: int = 1
     analysis_queue_wait_seconds: float = 60
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     max_sessions: int = 20
     # Requests allowed per visitor (IP address) per hour; 0 turns a limit off.
     uploads_per_hour: int = 10
-    questions_per_hour: int = 30
+    plans_per_hour: int = 30
     # Reverse proxies in front of the app that append to X-Forwarded-For (1 on most
     # hosts). 0 means the app is reached directly and the header is ignored, since
     # a visitor could otherwise write any address into it.
@@ -53,7 +53,6 @@ class Settings(BaseSettings):
     # "true-client-ip" behind Render's Cloudflare edge). Takes priority when set
     # and present; leave empty when nothing in front of the app sets it.
     client_ip_header: str = ""
-    custom_charts_per_hour: int = 120
     # Swagger UI at /docs and ReDoc at /redoc; render.yaml turns them off for the public site.
     api_docs: bool = True
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

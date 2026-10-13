@@ -20,9 +20,10 @@ Upload a CSV or Excel file (up to 75 MB) and get the whole exploratory pass in s
 - **Outliers explained, not just counted.** Two rules (1.5 × IQR and |z| > 3), marked on the charts, listed by row with a likely cause (placeholder code like 999, impossible negative, a 100× typo, or a genuine extreme), and shown with the mean, spread and correlation with and without them.
 - **Relationships.** Correlation heatmaps, scatter plots for every pair, any number broken down by any category, any two categories crossed, yes/no columns compared against everything else, and statistical tests with adjusted p-values.
 - **Over time.** Trend, seasonality and autocorrelation whenever the file has a time axis: a date column, or date parts, timestamps, years, steps or meaningful row order.
-- **Next steps.** The analyses this data supports (logistic or linear regression, classification, forecasting, segmentation, group comparisons), each with the reason from the data and what to check first. Describe a goal in plain words to get them ordered into a plan.
-- **Ask and export.** Questions about the data, custom charts, a data dictionary, the cleaned CSV, and an EDA report as HTML or PDF.
+- **A senior analyst's read.** A verdict on whether the data is ready to analyse, then the concerns ranked by how badly they would mislead: leakage, gaps that aren't random, entry errors, correlations carried by a few outliers, too few rows per predictor, near-duplicate or lopsided columns. It also lists what the data does well and what it can't tell you (cause and effect, trends without a time axis, findings that may be chance after many tests).
+- **Next steps.** The analyses this data supports (regression, classification, forecasting, segmentation, group comparisons), each marked ready, needs work first, or weak evidence, with the risks that could make the answer wrong and what to check first. Describe a goal in plain words to get them ordered into a plan.
+- **Export.** A data dictionary, the cleaned CSV, and an EDA report as HTML or PDF.
 
 ## Why the numbers can be trusted
 
-Pandas, NumPy, SciPy and statsmodels compute every figure. A language model (Groq, `openai/gpt-oss-120b`) only explains results it is handed, and the code checks every number in its reply against the computed results: any number it didn't receive throws the reply out in favour of rule-based text. Each summary, answer and plan says which one wrote it.
+Pandas, NumPy, SciPy and statsmodels compute every figure. A language model (Groq, `openai/gpt-oss-120b`) only explains results it is handed, and the code checks every number in its reply against the computed results: any number it didn't receive throws the reply out in favour of rule-based text. Each summary and plan says which one wrote it.

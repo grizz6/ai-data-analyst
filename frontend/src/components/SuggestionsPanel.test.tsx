@@ -12,6 +12,8 @@ const plan = {
       title: "Predict churned (yes/no)",
       why: "Shows who is likely to leave.",
       action: { tab: "variables", column: "churned", label: "See churned" },
+      readiness: "needs_work",
+      risks: ["Possible leakage: last_login almost perfectly separates churned."],
       check_first: ["The smaller group is only 12% of rows: judge models by recall and AUC, not accuracy."],
     },
   ],
@@ -28,7 +30,7 @@ describe("SuggestionsPanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onAction = vi.fn();
     const result = sampleResult();
-    render(<SuggestionsPanel sessionId={result.session_id} recommendations={result.recommendations} onAction={onAction} />);
+    render(<SuggestionsPanel sessionId={result.session_id} review={result.review} recommendations={result.recommendations} onAction={onAction} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Reduce customer churn" }));
     const steps = await screen.findByLabelText("Plan");
@@ -37,6 +39,8 @@ describe("SuggestionsPanel", () => {
     expect(within(steps).getByText("Plan by test-model, from the analyses this data supports.")).toBeInTheDocument();
     expect(within(steps).getByText(/no cost column/)).toBeInTheDocument();
     expect(within(within(steps).getByRole("list", { name: "Check first" })).getByText(/only 12% of rows/)).toBeInTheDocument();
+    expect(within(within(steps).getByRole("list", { name: "Risks" })).getByText(/Possible leakage/)).toBeInTheDocument();
+    expect(within(steps).getByText("Needs work first")).toBeInTheDocument();
     await userEvent.click(within(steps).getByRole("button", { name: "See churned" }));
     expect(onAction).toHaveBeenCalledWith(plan.steps[0].action);
   });
@@ -44,7 +48,7 @@ describe("SuggestionsPanel", () => {
   it("lists the top follow-up analyses with the reason from the data, the rest on request", async () => {
     const result = sampleResult();
     expect(result.recommendations.length).toBeGreaterThan(5);
-    render(<SuggestionsPanel sessionId="s" recommendations={result.recommendations} onAction={() => {}} />);
+    render(<SuggestionsPanel sessionId="s" review={null} recommendations={result.recommendations} onAction={() => {}} />);
     const list = screen.getByRole("region", { name: "What this data could be used for" });
     const items = () => list.querySelectorAll(".plan-steps > li");
     expect(items()).toHaveLength(5);
@@ -55,8 +59,18 @@ describe("SuggestionsPanel", () => {
 
   it("shows the server's message when planning fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "Too many questions." }, 429)));
-    render(<SuggestionsPanel sessionId="s" recommendations={[]} onAction={() => {}} />);
+    render(<SuggestionsPanel sessionId="s" review={null} recommendations={[]} onAction={() => {}} />);
     await userEvent.type(screen.getByRole("textbox", { name: "Your goal" }), "grow sales{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Too many questions.");
+  });
+
+  it("opens with a critical read of the data: verdict, concerns, strengths and limits", () => {
+    const result = sampleResult();
+    render(<SuggestionsPanel sessionId="s" review={result.review} recommendations={[]} onAction={() => {}} />);
+    const read = screen.getByRole("region", { name: "Analyst's read" });
+    expect(within(read).getByText(result.review!.verdict)).toHaveClass("verdict", "warning");
+    const concerns = within(read).getByRole("list", { name: "Concerns" });
+    expect(within(concerns).getAllByRole("listitem")[0]).toHaveTextContent(/^Only 31 rows/);
+    expect(within(read).getByRole("list", { name: "Can't conclude" })).toHaveTextContent(/Cause and effect/);
   });
 });

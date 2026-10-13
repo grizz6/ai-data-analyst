@@ -49,15 +49,15 @@ def test_uploads_over_the_hourly_limit_get_429(client, monkeypatch, sample_csv_b
     assert "limit is 2 per hour" in res.json()["detail"]
 
 
-def test_questions_are_limited_separately_from_uploads(client, monkeypatch, sample_csv_bytes):
+def test_plans_are_limited_separately_from_uploads(client, monkeypatch, sample_csv_bytes):
     monkeypatch.setattr(settings, "uploads_per_hour", 1)
-    monkeypatch.setattr(settings, "questions_per_hour", 2)
+    monkeypatch.setattr(settings, "plans_per_hour", 2)
     session_id = client.post("/api/upload", files={"file": ("s.csv", sample_csv_bytes, "text/csv")}).json()[
         "session_id"
     ]
 
-    ask = lambda: client.post(f"/api/sessions/{session_id}/ask", json={"question": "What stands out?"})  # noqa: E731
-    assert [ask().status_code for _ in range(3)] == [200, 200, 429]
+    plan = lambda: client.post(f"/api/sessions/{session_id}/plan", json={"goal": "What stands out?"})  # noqa: E731
+    assert [plan().status_code for _ in range(3)] == [200, 200, 429]
     # Reading results and downloads are never limited.
     assert client.get(f"/api/sessions/{session_id}").status_code == 200
     assert client.get(f"/api/sessions/{session_id}/report").status_code == 200

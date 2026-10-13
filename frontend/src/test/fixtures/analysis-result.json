@@ -335,7 +335,6 @@
       "units": 135
     }
   ],
-  "chat_history": [],
   "rows_in_file": 31,
   "sampled": false,
   "statistics": {
@@ -1705,6 +1704,10 @@
         "label": "See sales"
       },
       "score": 79.66,
+      "readiness": "needs_work",
+      "risks": [
+        "31 rows for 3 candidate predictors: under 20 rows each, so coefficients will be unstable."
+      ],
       "check_first": []
     },
     {
@@ -1722,6 +1725,10 @@
         "label": "See units"
       },
       "score": 79.66,
+      "readiness": "needs_work",
+      "risks": [
+        "31 rows for 3 candidate predictors: under 20 rows each, so coefficients will be unstable."
+      ],
       "check_first": []
     },
     {
@@ -1739,6 +1746,11 @@
         "label": "See relationships"
       },
       "score": 77.6,
+      "readiness": "needs_work",
+      "risks": [
+        "'Product C' has only 7 rows: its median is fragile.",
+        "Groups differ in more than product: the gap may come from something else that varies between them."
+      ],
       "check_first": [
         "An ANOVA or Kruskal-Wallis test confirms it; check each group has enough rows."
       ]
@@ -1758,6 +1770,10 @@
         "label": "See relationships"
       },
       "score": 74.5,
+      "readiness": "ready",
+      "risks": [
+        "Correlation says nothing about which drives which."
+      ],
       "check_first": [
         "Correlation isn't cause: look at the scatter plot for curves, clusters or outliers driving it."
       ]
@@ -1777,6 +1793,11 @@
         "label": "See relationships"
       },
       "score": 73.22,
+      "readiness": "needs_work",
+      "risks": [
+        "'Product C' has only 7 rows: its median is fragile.",
+        "Groups differ in more than product: the gap may come from something else that varies between them."
+      ],
       "check_first": [
         "An ANOVA or Kruskal-Wallis test confirms it; check each group has enough rows."
       ]
@@ -1796,6 +1817,11 @@
         "label": "See relationships"
       },
       "score": 73.12,
+      "readiness": "needs_work",
+      "risks": [
+        "'North' has only 5 rows: its median is fragile.",
+        "Groups differ in more than region: the gap may come from something else that varies between them."
+      ],
       "check_first": [
         "An ANOVA or Kruskal-Wallis test confirms it; check each group has enough rows."
       ]
@@ -1815,6 +1841,11 @@
         "label": "See it over time"
       },
       "score": 55.0,
+      "readiness": "weak",
+      "risks": [
+        "Only 12 periods: too short to separate trend from seasonality.",
+        "A forecast only extends the past; it can't see price changes, launches or shocks."
+      ],
       "check_first": [
         "Only 12 periods: too short for a reliable seasonal forecast."
       ]
@@ -1833,6 +1864,10 @@
         "label": "See region"
       },
       "score": 50.0,
+      "readiness": "needs_work",
+      "risks": [
+        "31 rows for 3 candidate predictors: under 20 rows each, so coefficients will be unstable."
+      ],
       "check_first": [
         "sales and units carry nearly the same information (r = 0.98); use one of them."
       ]
@@ -1851,6 +1886,10 @@
         "label": "See product"
       },
       "score": 50.0,
+      "readiness": "needs_work",
+      "risks": [
+        "31 rows for 3 candidate predictors: under 20 rows each, so coefficients will be unstable."
+      ],
       "check_first": [
         "sales and units carry nearly the same information (r = 0.98); use one of them."
       ]
@@ -1870,6 +1909,11 @@
         "label": "See it over time"
       },
       "score": 30.0,
+      "readiness": "weak",
+      "risks": [
+        "Only 12 periods: too short to separate trend from seasonality.",
+        "A forecast only extends the past; it can't see price changes, launches or shocks."
+      ],
       "check_first": [
         "Only 12 periods: too short for a reliable seasonal forecast."
       ]
@@ -2123,5 +2167,24 @@
       "cramers_v": 0.3326,
       "p_value": 0.3343
     }
-  ]
+  ],
+  "review": {
+    "readiness": "needs_work",
+    "verdict": "Usable after 2 fixes: only 31 rows; sales and units are near copies.",
+    "strengths": [
+      "Nearly complete: 100% of cells are filled.",
+      "No duplicate rows and no values that look like entry errors.",
+      "A clear signal: product explains 69% of sales (median 11400 for Product A vs 4900 for Product C).",
+      "A clear signal: product explains 58% of units (median 108.5 for Product A vs 60 for Product C)."
+    ],
+    "concerns": [
+      "Only 31 rows: averages and rates will move a lot with a few more rows. Describe, don't model, and report ranges rather than single numbers.",
+      "sales and units are almost the same measure (r = 0.98). Keep one; using both in a model splits their effect unpredictably."
+    ],
+    "cannot_conclude": [
+      "Cause and effect. product explains 69% of sales, but this is observational data: product may stand in for other differences between those groups.",
+      "Seasonality: under 24 periods of history isn't enough to tell a repeating pattern from noise.",
+      "Precise percentages: with this few rows one record moves a rate by a point or more."
+    ]
+  }
 }

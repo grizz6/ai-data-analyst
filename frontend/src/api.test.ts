@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { askQuestion, cleanedCsvUrl, reportDownloadUrl, uploadDataset } from "./api";
+import { cleanedCsvUrl, dictionaryUrl, planForGoal, reportDownloadUrl, uploadDataset } from "./api";
 import { jsonResponse, sampleResult } from "./test/fixtures";
 
 function stubFetch(response: Response) {
@@ -35,40 +35,37 @@ describe("uploadDataset", () => {
   });
 });
 
-describe("askQuestion", () => {
-  it("posts the question as JSON to the session", async () => {
-    const fetchMock = stubFetch(
-      jsonResponse({ answer: "West.", configured: false, source: "rule_based", fallback_reason: null }),
-    );
-
-    const response = await askQuestion("abc", "Top region?");
-
+describe("planForGoal", () => {
+  it("posts the goal as JSON to the session", async () => {
+    const plan = { goal: "g", steps: [], note: null, configured: false, source: "rule_based", model: null, fallback_reason: null };
+    const fetchMock = stubFetch(jsonResponse(plan));
+    await planForGoal("abc", "Grow sales");
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/sessions/abc/ask");
-    expect(JSON.parse(init.body as string)).toEqual({ question: "Top region?" });
-    expect(response.answer).toBe("West.");
+    expect(url).toBe("/api/sessions/abc/plan");
+    expect(JSON.parse(init.body as string)).toEqual({ goal: "Grow sales" });
   });
 
   it("explains an expired session", async () => {
     stubFetch(jsonResponse({ detail: "This analysis wasn't found." }, 404));
-    await expect(askQuestion("gone", "Hi?")).rejects.toThrow("This analysis wasn't found.");
+    await expect(planForGoal("gone", "Hi?")).rejects.toThrow("This analysis wasn't found.");
   });
 });
 
 describe("download URLs", () => {
   it("point at the session's report and cleaned CSV", () => {
     expect(reportDownloadUrl("abc")).toBe("/api/sessions/abc/report");
+    expect(dictionaryUrl("abc")).toBe("/api/sessions/abc/dictionary.csv");
     expect(cleanedCsvUrl("abc")).toBe("/api/sessions/abc/cleaned.csv");
   });
 });
 
 describe("error messages", () => {
   it("shows the server's sentence, but not a validation error list", async () => {
-    stubFetch(jsonResponse({ detail: "Too many questions: the limit is 30 per hour." }, 429));
-    await expect(askQuestion("s", "q")).rejects.toThrow("Too many questions: the limit is 30 per hour.");
+    stubFetch(jsonResponse({ detail: "Too many plans: the limit is 30 per hour." }, 429));
+    await expect(planForGoal("s", "g")).rejects.toThrow("Too many plans: the limit is 30 per hour.");
 
-    stubFetch(jsonResponse({ detail: [{ loc: ["body", "question"], msg: "too long" }] }, 422));
-    await expect(askQuestion("s", "q")).rejects.toThrow("Question failed");
+    stubFetch(jsonResponse({ detail: [{ loc: ["body", "goal"], msg: "too long" }] }, 422));
+    await expect(planForGoal("s", "g")).rejects.toThrow("Couldn't make a plan");
 
     stubFetch(new Response("<html>Bad gateway</html>", { status: 502 }));
     await expect(uploadDataset(file)).rejects.toThrow("Upload failed");

@@ -79,40 +79,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{session_id}/ask": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask Question */
-        post: operations["ask_question_api_sessions__session_id__ask_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{session_id}/charts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Build Chart */
-        post: operations["build_chart_api_sessions__session_id__charts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{session_id}/cleaned.csv": {
         parameters: {
             query?: never;
@@ -218,8 +184,6 @@ export interface components {
             categorical_summaries: components["schemas"]["CategoricalSummary"][];
             /** Charts */
             charts: components["schemas"]["ChartSpec"][];
-            /** Chat History */
-            chat_history: components["schemas"]["ChatTurn"][];
             /** Cleaned Preview Rows */
             cleaned_preview_rows: {
                 [key: string]: unknown;
@@ -252,6 +216,7 @@ export interface components {
             quality_issues: components["schemas"]["QualityIssue"][];
             /** Recommendations */
             recommendations: components["schemas"]["Recommendation"][];
+            review: components["schemas"]["AnalystReview"] | null;
             /** Row Count */
             row_count: number;
             /**
@@ -282,6 +247,25 @@ export interface components {
             visuals: {
                 [key: string]: components["schemas"]["ChartSpec"][];
             };
+        };
+        /**
+         * AnalystReview
+         * @description A critical read of the whole dataset, the way a senior analyst would brief a colleague.
+         */
+        AnalystReview: {
+            /** Cannot Conclude */
+            cannot_conclude: string[];
+            /** Concerns */
+            concerns: string[];
+            /**
+             * Readiness
+             * @enum {string}
+             */
+            readiness: "ready" | "needs_work" | "not_ready";
+            /** Strengths */
+            strengths: string[];
+            /** Verdict */
+            verdict: string;
         };
         /**
          * BinaryComparison
@@ -439,26 +423,6 @@ export interface components {
             /** Title */
             title: string;
         };
-        /**
-         * ChatTurn
-         * @description One question asked about an analysis, and the answer it got.
-         */
-        ChatTurn: {
-            /** Answer */
-            answer: string;
-            /** Fallback Reason */
-            fallback_reason: string | null;
-            /** Model */
-            model: string | null;
-            /** Question */
-            question: string;
-            /**
-             * Source
-             * @default rule_based
-             * @enum {string}
-             */
-            source: "rule_based" | "llm";
-        };
         /** CleaningAction */
         CleaningAction: {
             /** Action */
@@ -514,31 +478,6 @@ export interface components {
             x: unknown[];
             /** Y */
             y: number[];
-        };
-        /**
-         * CustomChartRequest
-         * @description A chart the user builds: which kind, and which columns go where.
-         *
-         *     histogram: x (numeric). bar: x (category), plus y when aggregating a value.
-         *     scatter: x and y (both numeric). line: x (date or number), plus y when
-         *     aggregating a value. box: y (numeric), optionally split by x (category).
-         */
-        CustomChartRequest: {
-            /**
-             * Aggregate
-             * @default count
-             * @enum {string}
-             */
-            aggregate: "count" | "sum" | "mean" | "median";
-            /**
-             * Chart Type
-             * @enum {string}
-             */
-            chart_type: "histogram" | "bar" | "scatter" | "line" | "box";
-            /** X */
-            x?: string | null;
-            /** Y */
-            y?: string | null;
         };
         /** DistributionStat */
         DistributionStat: {
@@ -796,6 +735,14 @@ export interface components {
             check_first: string[];
             /** Id */
             id: string;
+            /**
+             * Readiness
+             * @default ready
+             * @enum {string}
+             */
+            readiness: "ready" | "needs_work" | "weak";
+            /** Risks */
+            risks: string[];
             /** Title */
             title: string;
             /** Why */
@@ -815,31 +762,6 @@ export interface components {
             message: string;
             /** Severity */
             severity: string;
-        };
-        /** QuestionRequest */
-        QuestionRequest: {
-            /** Question */
-            question: string;
-        };
-        /** QuestionResponse */
-        QuestionResponse: {
-            /** Answer */
-            answer: string;
-            /**
-             * Configured
-             * @default false
-             */
-            configured: boolean;
-            /** Fallback Reason */
-            fallback_reason: string | null;
-            /** Model */
-            model: string | null;
-            /**
-             * Source
-             * @default rule_based
-             * @enum {string}
-             */
-            source: "rule_based" | "llm";
         };
         /** RankCorrelation */
         RankCorrelation: {
@@ -871,6 +793,14 @@ export interface components {
             columns: string[];
             /** Id */
             id: string;
+            /**
+             * Readiness
+             * @default ready
+             * @enum {string}
+             */
+            readiness: "ready" | "needs_work" | "weak";
+            /** Risks */
+            risks: string[];
             /**
              * Score
              * @default 0
@@ -1175,76 +1105,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ask_question_api_sessions__session_id__ask_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuestionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    build_chart_api_sessions__session_id__charts_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CustomChartRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChartSpec"];
-                };
             };
             /** @description Validation Error */
             422: {

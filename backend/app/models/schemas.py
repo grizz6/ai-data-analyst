@@ -114,24 +114,6 @@ class ModelExplanation(ApiModel):
     chart_explanations: list[dict[str, str]] = Field(default_factory=list)
 
 
-class ModelAnswer(ApiModel):
-    answer: str = Field(min_length=1)
-
-
-class CustomChartRequest(ApiModel):
-    """A chart the user builds: which kind, and which columns go where.
-
-    histogram: x (numeric). bar: x (category), plus y when aggregating a value.
-    scatter: x and y (both numeric). line: x (date or number), plus y when
-    aggregating a value. box: y (numeric), optionally split by x (category).
-    """
-
-    chart_type: Literal["histogram", "bar", "scatter", "line", "box"]
-    x: str | None = Field(default=None, max_length=500)
-    y: str | None = Field(default=None, max_length=500)
-    aggregate: Literal["count", "sum", "mean", "median"] = "count"
-
-
 class DistributionStat(ApiModel):
     column: str
     n: int
@@ -240,16 +222,6 @@ class TargetSuggestion(ApiModel):
     reason: str
 
 
-class ChatTurn(ApiModel):
-    """One question asked about an analysis, and the answer it got."""
-
-    question: str
-    answer: str
-    source: ExplanationSource = "rule_based"
-    model: str | None = None
-    fallback_reason: str | None = None
-
-
 VariableKind = Literal["binary", "number", "count", "category", "date", "identifier", "text", "constant"]
 
 
@@ -346,7 +318,6 @@ class BinaryComparison(ApiModel):
     detail: str
 
 
-
 class DuplicateGroup(ApiModel):
     """Rows that are exact copies of each other, numbered from 1 as in the file."""
 
@@ -438,8 +409,25 @@ class Recommendation(ApiModel):
     columns: list[str] = Field(default_factory=list)
     action: RecommendationAction
     score: float = 0.0
+    # "ready": the data supports it as is; "needs_work": fix the risks first;
+    # "weak": the evidence for it is thin, so expect little.
+    readiness: Literal["ready", "needs_work", "weak"] = "ready"
+    # What could make the result wrong or misleading.
+    risks: list[str] = Field(default_factory=list)
     # What to look at or fix in the data before running this analysis.
     check_first: list[str] = Field(default_factory=list)
+
+
+class AnalystReview(ApiModel):
+    """A critical read of the whole dataset, the way a senior analyst would brief a colleague."""
+
+    readiness: Literal["ready", "needs_work", "not_ready"]
+    verdict: str
+    strengths: list[str] = Field(default_factory=list)
+    # Most serious first.
+    concerns: list[str] = Field(default_factory=list)
+    # Conclusions this data can't support, however tempting.
+    cannot_conclude: list[str] = Field(default_factory=list)
 
 
 class PlanRequest(ApiModel):
@@ -451,6 +439,8 @@ class PlanStep(ApiModel):
     title: str
     why: str
     action: RecommendationAction
+    readiness: Literal["ready", "needs_work", "weak"] = "ready"
+    risks: list[str] = Field(default_factory=list)
     check_first: list[str] = Field(default_factory=list)
 
 
@@ -507,36 +497,18 @@ class AnalysisResult(ApiModel):
     breakdowns: list[CategoryBreakdown] = Field(default_factory=list)
     crosstabs: list[CategoryCrosstab] = Field(default_factory=list)
     recommendations: list[Recommendation] = Field(default_factory=list)
+    review: AnalystReview | None = None
     # Columns that look like outcomes, most likely first; used to suggest next steps.
     model_targets: list[TargetSuggestion] = Field(default_factory=list)
     preview_rows: list[dict[str, Any]]
     cleaned_preview_rows: list[dict[str, Any]]
-    # Questions asked so far, oldest first. Kept with the session, so the thread
-    # survives a reload and earlier answers give follow-up questions context.
-    chat_history: list[ChatTurn] = Field(default_factory=list)
 
     # The full cleaned dataset as CSV, kept with the session for download but
     # left out of the JSON response, which only carries a preview.
     _cleaned_csv: bytes | None = PrivateAttr(default=None)
-    # The prepared data (no filled-in values, no identifier columns) that custom charts are drawn from.
-    _chart_csv: bytes | None = PrivateAttr(default=None)
 
     @property
     def cleaned_csv(self) -> bytes | None:
         return self._cleaned_csv
 
-    @property
-    def chart_csv(self) -> bytes | None:
-        return self._chart_csv
 
-
-class QuestionRequest(ApiModel):
-    question: str = Field(max_length=2_000)
-
-
-class QuestionResponse(ApiModel):
-    answer: str
-    configured: bool = False
-    source: ExplanationSource = "rule_based"
-    model: str | None = None
-    fallback_reason: str | None = None

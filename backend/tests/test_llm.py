@@ -221,45 +221,13 @@ def test_default_model_is_one_groq_still_serves():
     assert settings.llm_fallback_models == ["openai/gpt-oss-20b"]
 
 
-def ask(result, fake: FakeModel, question: str):
-    return asyncio.run(explanation.answer_question(result, question, client=fake.client()))
-
-
-def test_grounded_answer_is_used_and_numbers_from_the_question_are_allowed(result, configured):
-    fake = FakeModel(completion({"answer": "West leads. The top 3 regions are West, East, and North."}))
-
-    response = ask(result, fake, "What are the top 3 regions?")
-
-    assert response.source == "llm"
-    assert response.answer.startswith("West leads")
-
-
-def test_answer_with_an_invented_number_falls_back(result, configured):
-    fake = FakeModel(completion({"answer": "West sold 58,000 in total."}))
-
-    response = ask(result, fake, "How much did West sell?")
-
-    assert response.source == "rule_based"
-    assert response.answer.startswith("The language model couldn't answer just now")
-    assert "58,000" in response.fallback_reason
-
-
-def test_ask_endpoint_uses_the_model_when_configured(client, sample_csv_bytes, configured, monkeypatch):
+def test_upload_uses_the_model_when_configured(client, sample_csv_bytes, configured, monkeypatch):
     fake = FakeModel(
         completion({"dataset_overview": "31 rows.", "analysis_summary": "Sales track units.", "recommendations": []}),
-        completion({"answer": "Sales and units rise and fall together."}),
     )
     monkeypatch.setattr(explanation, "make_client", fake.client)
 
     upload = client.post("/api/upload", files={"file": ("s.csv", sample_csv_bytes, "text/csv")}).json()
     assert upload["explanation"]["source"] == "llm"
-
-    answer = client.post(f"/api/sessions/{upload['session_id']}/ask", json={"question": "Link?"}).json()
-    assert answer == {
-        "answer": "Sales and units rise and fall together.",
-        "configured": True,
-        "source": "llm",
-        "model": "test-model",
-        "fallback_reason": None,
-    }
+    assert upload["explanation"]["analysis_summary"] == "Sales track units."
     assert client.get("/api/health").json()["llm_configured"] is True
